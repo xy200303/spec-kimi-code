@@ -66,7 +66,9 @@ Foreground mode blocks the current turn until the command completes or times out
 
 Plan mode is a constrained working state: once entered, `Write` and `Edit` are restricted to writing the current plan file only, and `TaskStop` is blocked entirely. All other tools (including `Bash`) are still governed by the current permission rules.
 
-**`EnterPlanMode`** accepts no parameters; upon success it returns workflow guidance and the plan file path.
+When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, Plan mode instead creates project-local documents at `<workspace>/specs/<plan-id>/`: `spec.md` starts with goal, constraints, and acceptance-criteria sections, while `design.md` holds the implementation design submitted for approval. `Write` and `Edit` are restricted to these two documents, so both can be reviewed and committed with the project. Fill all three specification sections before requesting approval; `ExitPlanMode` presents `design.md` only after this check passes.
+
+**`EnterPlanMode`** accepts no parameters; upon success it returns workflow guidance and the plan file path. With spec coding enabled, it returns the project-local specification and design paths instead.
 
 **`ExitPlanMode`** reads the current plan file, presents the plan to the user for approval, then exits Plan mode. The optional `options` parameter lets the Agent offer 1–3 alternative approaches (each with a `label` and `description`; `label` max 80 characters) for the user to choose from during approval. Labels must be unique and cannot use reserved words such as `Approve`, `Reject`, `Reject and Exit`, or `Revise`.
 

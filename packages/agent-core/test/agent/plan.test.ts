@@ -1,6 +1,7 @@
 import type { ToolCall } from '@moonshot-ai/kosong';
 import { describe, expect, it, vi } from 'vitest';
 
+import { FlagResolver } from '../../src/flags';
 import { createFakeKaos } from '../tools/fixtures/fake-kaos';
 import { createCommandKaos, testAgent } from './harness/agent';
 
@@ -65,6 +66,33 @@ describe('manual plan entry', () => {
     expect(resumed.agent.planMode.planFilePath).toBe(livePath);
   });
 
+  it('creates specification documents in the workspace when spec coding is enabled', async () => {
+    const writeText = vi.fn(async (_path: string, content: string) => content.length);
+    const flags = new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' });
+    const ctx = testAgent({
+      experimentalFlags: flags,
+      kaos: createPlanKaos({ writeText }),
+    });
+
+    await ctx.agent.planMode.enter('project-documents');
+
+    expect(ctx.agent.planMode.planFilePath).toBe('/workspace/specs/project-documents/design.md');
+    expect(ctx.agent.planMode.specDocuments).toEqual({
+      root: '/workspace/specs/project-documents',
+      spec: '/workspace/specs/project-documents/spec.md',
+      design: '/workspace/specs/project-documents/design.md',
+    });
+    expect(ctx.agent.planMode.writableFilePaths).toEqual([
+      '/workspace/specs/project-documents/spec.md',
+      '/workspace/specs/project-documents/design.md',
+    ]);
+    expect(writeText).toHaveBeenCalledWith(
+      '/workspace/specs/project-documents/spec.md',
+      expect.stringContaining('# Specification'),
+    );
+    expect(writeText).toHaveBeenCalledWith('/workspace/specs/project-documents/design.md', '');
+  });
+
   it('enters plan mode through the EnterPlanMode tool and reminds the next step', async () => {
     const enterPlanModeCall: ToolCall = {
       type: 'function',
@@ -124,6 +152,49 @@ describe('plan clear', () => {
       path: planPath,
     });
     await ctx.expectResumeMatches();
+  });
+});
+
+describe('spec coding approval', () => {
+  it('requires a complete specification before requesting design approval', async () => {
+    const files = new Map<string, string>();
+    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
+    const writeText = vi.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return content.length;
+    });
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+      kaos: createPlanKaos({ readText, writeText }),
+    });
+    ctx.configure({ tools: ['ExitPlanMode'] });
+    await ctx.rpc.setPermission({ mode: 'yolo' });
+    await ctx.agent.planMode.enter('incomplete-specification');
+
+    const designPath = ctx.agent.planMode.planFilePath;
+    if (designPath === null) throw new Error('expected design path');
+    files.set(designPath, '# Design\n\n- Implement the feature.');
+
+    const exitPlanModeCall: ToolCall = {
+      type: 'function',
+      id: 'call_exit_incomplete_specification',
+      name: 'ExitPlanMode',
+      arguments: '{}',
+    };
+    ctx.mockNextResponse(
+      { type: 'text', text: 'I will submit the design.' },
+      exitPlanModeCall,
+    );
+    ctx.mockNextResponse({ type: 'text', text: 'I need to complete the specification.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+
+    await ctx.untilTurnEnd();
+    expect(ctx.agent.planMode.isActive).toBe(true);
+    expect(
+      ctx.allEvents.some((event) => event.type === '[rpc]' && event.event === 'requestApproval'),
+    ).toBe(false);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Specification is incomplete');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Goal, Constraints, Acceptance Criteria');
   });
 });
 
@@ -326,6 +397,41 @@ describe('plan exit tool options', () => {
 });
 
 describe('plan allows safe tool flow', () => {
+  it('allows writing the specification document without an approval prompt', async () => {
+    const files = new Map<string, string>();
+    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
+    const writeText = vi.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return content.length;
+    });
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+      kaos: createPlanKaos({ readText, writeText }),
+    });
+    ctx.configure({ tools: ['Write'] });
+    await ctx.agent.planMode.enter('spec-write');
+
+    const specPath = ctx.agent.planMode.specDocuments?.spec;
+    if (specPath === undefined) throw new Error('expected specification path');
+    const content = '# Specification\n\n## Goal\n\nCreate a project-local spec workspace.';
+    const writeSpecCall: ToolCall = {
+      type: 'function',
+      id: 'call_write_specification',
+      name: 'Write',
+      arguments: JSON.stringify({ path: specPath, content }),
+    };
+
+    ctx.mockNextResponse({ type: 'text', text: 'I will update the specification.' }, writeSpecCall);
+    ctx.mockNextResponse({ type: 'text', text: 'Specification updated.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Draft the specification' }] });
+
+    await ctx.untilTurnEnd();
+    expect(files.get(specPath)).toBe(content);
+    expect(
+      ctx.allEvents.some((event) => event.type === '[rpc]' && event.event === 'requestApproval'),
+    ).toBe(false);
+  });
+
   it.each(['Write', 'Edit'] as const)(
     'runs %s on the active plan file without approval in manual mode',
     async (toolName) => {

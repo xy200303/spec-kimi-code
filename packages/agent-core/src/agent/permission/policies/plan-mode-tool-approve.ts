@@ -18,7 +18,7 @@ export class PlanModeToolApprovePermissionPolicy implements PermissionPolicy {
     if (
       (toolName === 'Write' || toolName === 'Edit') &&
       this.agent.planMode.isActive &&
-      writesOnlyPlanFile(context, this.agent.planMode.planFilePath)
+      writesOnlyPlanFiles(context, this.agent.planMode.writableFilePaths)
     ) {
       return {
         kind: 'approve',
@@ -44,11 +44,10 @@ export class PlanModeToolApprovePermissionPolicy implements PermissionPolicy {
   }
 }
 
-function writesOnlyPlanFile(
+function writesOnlyPlanFiles(
   context: PermissionPolicyContext,
-  planFilePath: string | null,
+  planFilePaths: readonly string[],
 ): boolean {
-  if (planFilePath === null) return false;
   const writeAccesses = writeFileAccesses(context);
-  return writeAccesses.every((access) => access.path === planFilePath);
+  return writeAccesses.length > 0 && writeAccesses.every((access) => planFilePaths.includes(access.path));
 }

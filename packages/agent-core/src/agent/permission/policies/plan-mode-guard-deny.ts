@@ -12,19 +12,19 @@ export class PlanModeGuardDenyPermissionPolicy implements PermissionPolicy {
 
     const toolName = context.toolCall.name;
     if (toolName === 'Write' || toolName === 'Edit') {
-      const planFilePath = this.agent.planMode.planFilePath;
-      if (planFilePath === null) {
+      const writableFilePaths = this.agent.planMode.writableFilePaths;
+      if (writableFilePaths.length === 0) {
         return {
           kind: 'deny',
-          message: planModeWriteDeniedMessage(planFilePath),
+          message: planModeWriteDeniedMessage(writableFilePaths),
         };
       }
-      if (writesOnlyPlanFile(context, planFilePath)) {
+      if (writesOnlyPlanFiles(context, writableFilePaths)) {
         return;
       }
       return {
         kind: 'deny',
-        message: planModeWriteDeniedMessage(planFilePath),
+        message: planModeWriteDeniedMessage(writableFilePaths),
       };
     }
 
@@ -48,18 +48,19 @@ export class PlanModeGuardDenyPermissionPolicy implements PermissionPolicy {
   }
 }
 
-function writesOnlyPlanFile(
+function writesOnlyPlanFiles(
   context: PermissionPolicyContext,
-  planFilePath: string,
+  planFilePaths: readonly string[],
 ): boolean {
   const writeAccesses = writeFileAccesses(context);
   if (writeAccesses.length === 0) return false;
-  return writeAccesses.every((access) => access.path === planFilePath);
+  return writeAccesses.every((access) => planFilePaths.includes(access.path));
 }
 
-function planModeWriteDeniedMessage(planFilePath: string | null): string {
+function planModeWriteDeniedMessage(writableFilePaths: readonly string[]): string {
+  const paths = writableFilePaths.length === 0 ? '(no writable planning documents selected yet)' : writableFilePaths.join(', ');
   return (
-    `Plan mode is active. You may only write to the current plan file: ${planFilePath ?? '(no plan file selected yet)'}. ` +
+    `Plan mode is active. You may only write to the current planning documents: ${paths}. ` +
     'Call ExitPlanMode to exit plan mode before editing other files.'
   );
 }

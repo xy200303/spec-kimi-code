@@ -47,13 +47,18 @@ export class EnterPlanModeTool implements BuiltinTool<EnterPlanModeInput> {
         }
 
         this.agent.telemetry.track('plan_enter_resolved', { outcome: 'auto_approved' });
-        return { output: enteredPlanModeMessage(this.agent.planMode.planFilePath) };
+        return {
+          output: enteredPlanModeMessage(
+            this.agent.planMode.planFilePath,
+            this.agent.planMode.specDocuments?.spec,
+          ),
+        };
       },
     };
   }
 }
 
-function enteredPlanModeMessage(planPath: string | null): string {
+function enteredPlanModeMessage(planPath: string | null, specPath: string | undefined): string {
   if (planPath === null) {
     return [
       'Plan mode is now active. Your workflow:',
@@ -70,14 +75,19 @@ function enteredPlanModeMessage(planPath: string | null): string {
   return [
     'Plan mode is now active. Your workflow:',
     '',
-    `Plan file: ${planPath}`,
+    `Design file: ${planPath}`,
+    ...(specPath === undefined ? [] : [`Specification file: ${specPath}`]),
     '',
     '1. Use read-only tools (Read, Grep, Glob) to investigate the codebase. Use Bash only when needed.',
     '2. Design a concrete, step-by-step plan.',
-    '3. Write the plan to the plan file with Write or Edit.',
+    specPath === undefined
+      ? '3. Write the plan to the plan file with Write or Edit.'
+      : '3. Update the specification, then write the implementation design.',
     '4. When the plan is ready, call ExitPlanMode for user approval.',
     '',
-    'Do NOT edit files other than the plan file while plan mode is active.',
+    specPath === undefined
+      ? 'Do NOT edit files other than the plan file while plan mode is active.'
+      : 'Do NOT edit files other than the specification and design files while plan mode is active.',
     'Use Bash only when needed; Bash follows the normal permission mode and rules.',
   ].join('\n');
 }

@@ -99,6 +99,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     args: ExitPlanModeInput,
   ): Promise<ToolInputDisplay | undefined> {
     if (!this.agent.planMode.isActive) return undefined;
+    if (!(await this.hasCompleteSpecification())) return undefined;
     let data: PlanData;
     try {
       data = await this.agent.planMode.data();
@@ -157,6 +158,9 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   }
 
   private async resolvePlan(): Promise<ResolvePlanResult> {
+    const specificationError = await this.resolveSpecification();
+    if (specificationError !== undefined) return { ok: false, error: specificationError };
+
     let source: ExitPlanModePlanSource | null;
     try {
       const data = await this.agent.planMode.data();
@@ -187,6 +191,33 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
             ? 'No plan file found. Write the plan to the current plan file first, then call ExitPlanMode.'
             : `No plan file found. Write your plan to ${path} first, then call ExitPlanMode.`,
       },
+    };
+  }
+
+  private async hasCompleteSpecification(): Promise<boolean> {
+    try {
+      const specification = await this.agent.planMode.specificationData();
+      return specification === null || specification.missingSections.length === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private async resolveSpecification(): Promise<ExecutableToolResult | undefined> {
+    let specification;
+    try {
+      specification = await this.agent.planMode.specificationData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to read specification file.';
+      return { isError: true, output: `Failed to read specification file: ${message}` };
+    }
+    if (specification === null || specification.missingSections.length === 0) return undefined;
+
+    return {
+      isError: true,
+      output:
+        `Specification is incomplete. Complete ${specification.missingSections.join(', ')} in ` +
+        `${specification.path} before requesting design approval.`,
     };
   }
 }

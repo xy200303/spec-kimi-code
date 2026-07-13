@@ -32,6 +32,15 @@ export const FLAG_DEFINITIONS = [
     default: false,
     surface: 'core',
   },
+  {
+    id: 'spec-coding',
+    title: 'Spec-driven coding workspace',
+    description:
+      'Store specification and design documents in the workspace so planning artifacts can be reviewed and committed with the code.',
+    env: 'KIMI_CODE_EXPERIMENTAL_SPEC_CODING',
+    default: false,
+    surface: 'core',
+  },
 ] as const satisfies readonly FlagDefinitionInput[];
 
 /** Literal union of registered flag ids. */

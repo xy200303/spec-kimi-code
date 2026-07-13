@@ -23,7 +23,8 @@ export class PlanModeInjector extends DynamicInjector {
   }
 
   override async getInjection(): Promise<string | undefined> {
-    const { isActive, planFilePath } = this.agent.planMode;
+    const { isActive, planFilePath, specDocuments } = this.agent.planMode;
+    const specFilePath = specDocuments?.spec;
     if (!isActive) {
       if (!this.wasActive) {
         return undefined;
@@ -36,17 +37,17 @@ export class PlanModeInjector extends DynamicInjector {
       this.injectedAt = null;
       this.wasActive = true;
       if (await this.hasCurrentPlanContent()) {
-        return reentryReminder(planFilePath);
+        return reentryReminder(planFilePath, specFilePath);
       }
     }
     const variant = this.getVariant();
     if (variant === null) return undefined;
 
     return variant === 'full'
-      ? fullReminder(planFilePath)
+      ? fullReminder(planFilePath, specFilePath)
       : variant === 'sparse'
-        ? sparseReminder(planFilePath)
-        : reentryReminder(planFilePath);
+        ? sparseReminder(planFilePath, specFilePath)
+        : reentryReminder(planFilePath, specFilePath);
   }
 
   protected getVariant(): PlanModeVariant | null {
@@ -78,23 +79,33 @@ export class PlanModeInjector extends DynamicInjector {
     }
   }
 }
-function withPlanFileFooter(body: string, planFilePath: PlanFilePath): string {
+function withPlanFileFooter(
+  body: string,
+  planFilePath: PlanFilePath,
+  specFilePath: string | undefined,
+): string {
   if (planFilePath === null || planFilePath.length === 0) return body;
-  return `${body}\n\nPlan file: ${planFilePath}`;
+  const specFile = specFilePath === undefined ? '' : `\nSpecification file: ${specFilePath}`;
+  return `${body}\n\nDesign file: ${planFilePath}${specFile}`;
 }
 
-function fullReminder(planFilePath: PlanFilePath): string {
+function fullReminder(planFilePath: PlanFilePath, specFilePath: string | undefined): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return inlineFullReminder();
   }
 
-  const body = `Plan mode is active. You MUST NOT make any edits (with the exception of the current plan file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const writeStep =
+    specFilePath === undefined
+      ? '4. Write Plan — modify the plan file with Write or Edit. Use Write if the plan file does not exist yet.'
+      : '4. Write Documents — update the specification with the goal, constraints, and acceptance criteria, then write the implementation design.';
+  const body = `Plan mode is active. You MUST NOT make any edits (with the exception of ${writeTarget}) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
 
 Workflow:
   1. Understand — explore the codebase with Glob, Grep, Read.
   2. Design — converge on the best approach; consider trade-offs but aim for a single recommendation.
   3. Review — re-read key files to verify understanding.
-  4. Write Plan — modify the plan file with Write or Edit. Use Write if the plan file does not exist yet.
+  ${writeStep}
   5. Exit — call ExitPlanMode for user approval.
 
 ## Handling multiple approaches
@@ -107,37 +118,43 @@ AskUserQuestion is for clarifying missing requirements or user preferences that 
 Never ask about plan approval via text or AskUserQuestion.
 Your turn must end with either AskUserQuestion (to clarify requirements or preferences) or ExitPlanMode (to request plan approval). Do NOT end your turn any other way.
 Do NOT use AskUserQuestion to ask about plan approval or reference "the plan" — the user cannot see the plan until you call ExitPlanMode.`;
-  return withPlanFileFooter(body, planFilePath);
+  return withPlanFileFooter(body, planFilePath, specFilePath);
 }
 
-function sparseReminder(planFilePath: PlanFilePath): string {
+function sparseReminder(planFilePath: PlanFilePath, specFilePath: string | undefined): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return inlineSparseReminder();
   }
 
-  const body = `Plan mode still active (see full instructions earlier). Prefer read-only tools except the current plan file. Use Write or Edit to modify the plan file. If it does not exist yet, create it with Write first. Use Bash only when needed; Bash follows the normal permission mode and rules. Use AskUserQuestion to clarify user preferences when it helps you write a better plan. If the plan has multiple approaches, pass options to ExitPlanMode so the user can choose. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for approval). Never ask about plan approval via text or AskUserQuestion.`;
-  return withPlanFileFooter(body, planFilePath);
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const body = `Plan mode still active (see full instructions earlier). Prefer read-only tools except ${writeTarget}. Use Write or Edit to modify those documents. Use Bash only when needed; Bash follows the normal permission mode and rules. Use AskUserQuestion to clarify user preferences when it helps you write a better plan. If the plan has multiple approaches, pass options to ExitPlanMode so the user can choose. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for approval). Never ask about plan approval via text or AskUserQuestion.`;
+  return withPlanFileFooter(body, planFilePath, specFilePath);
 }
 
-function reentryReminder(planFilePath: PlanFilePath): string {
+function reentryReminder(planFilePath: PlanFilePath, specFilePath: string | undefined): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return inlineReentryReminder();
   }
 
-  const body = `Plan mode is active. You MUST NOT make any edits (with the exception of the current plan file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const writeStep =
+    specFilePath === undefined
+      ? '3. If same task: update the existing plan. If different task: replace it with a fresh plan.'
+      : '3. If same task: update the existing specification and design. If different task: replace them with fresh documents.';
+  const body = `Plan mode is active. You MUST NOT make any edits (with the exception of ${writeTarget}) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.
 
 ## Re-entering Plan Mode
 A plan file from a previous planning session already exists.
 Before proceeding:
   1. Read the existing plan file to understand what was previously planned.
   2. Evaluate the user's current request against that plan.
-  3. If different task: replace the old plan with a fresh one. If same task: update the existing plan.
+  ${writeStep}
   4. You may use Write or Edit to modify the plan file. If the file does not exist yet, create it with Write first.
   5. Use AskUserQuestion to clarify missing requirements or user preferences that affect the plan.
   6. Always edit the plan file before calling ExitPlanMode.
 
 Your turn must end with either AskUserQuestion (to clarify requirements) or ExitPlanMode (to request plan approval).`;
-  return withPlanFileFooter(body, planFilePath);
+  return withPlanFileFooter(body, planFilePath, specFilePath);
 }
 
 function inlineFullReminder(): string {

@@ -11,10 +11,40 @@ export type PlanData = null | {
 };
 export type PlanFilePath = string | null;
 
+export interface SpecDocumentPaths {
+  readonly root: string;
+  readonly spec: string;
+  readonly design: string;
+}
+
+export const REQUIRED_SPECIFICATION_SECTIONS = [
+  'Goal',
+  'Constraints',
+  'Acceptance Criteria',
+] as const;
+
+export type RequiredSpecificationSection = (typeof REQUIRED_SPECIFICATION_SECTIONS)[number];
+
+export interface SpecificationData {
+  readonly path: string;
+  readonly content: string;
+  readonly missingSections: readonly RequiredSpecificationSection[];
+}
+
+const SPEC_TEMPLATE = `# Specification
+
+## Goal
+
+## Constraints
+
+## Acceptance Criteria
+`;
+
 export class PlanMode {
   protected _isActive = false;
   protected _planId: null | string = null;
   protected _planFilePath: PlanFilePath = null;
+  protected _specDocuments: SpecDocumentPaths | null = null;
 
   constructor(protected readonly agent: Agent) {}
 
@@ -29,16 +59,20 @@ export class PlanMode {
 
     this._isActive = true;
     this._planId = id;
-    this._planFilePath = null;
+    this._specDocuments = this.specDocumentsFor(id);
+    this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
 
     let enterRecorded = false;
     try {
-      const planFilePath = this.planFilePathFor(id);
-      this._planFilePath = planFilePath;
+      const planFilePath = this._planFilePath;
+      if (planFilePath === null) throw new Error('Plan file path is unavailable');
       await this.ensurePlanDirectory(planFilePath);
       this.agent.records.logRecord({ type: 'plan_mode.enter', id });
       enterRecorded = true;
-      if (createFile) {
+      if (this._specDocuments !== null) {
+        await this.writeSpecTemplate(this._specDocuments.spec);
+        await this.writeEmptyPlanFile(planFilePath);
+      } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
     } catch (error) {
@@ -48,6 +82,7 @@ export class PlanMode {
         this._isActive = false;
         this._planId = null;
         this._planFilePath = null;
+        this._specDocuments = null;
       }
       throw error;
     }
@@ -63,7 +98,8 @@ export class PlanMode {
 
     this._isActive = true;
     this._planId = id;
-    this._planFilePath = this.planFilePathFor(id);
+    this._specDocuments = this.specDocumentsFor(id);
+    this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
   }
 
   cancel(id?: string): void {
@@ -75,6 +111,7 @@ export class PlanMode {
     this._isActive = false;
     this._planId = null;
     this._planFilePath = null;
+    this._specDocuments = null;
     this.agent.emitStatusUpdated();
   }
 
@@ -92,6 +129,7 @@ export class PlanMode {
     this._isActive = false;
     this._planId = null;
     this._planFilePath = null;
+    this._specDocuments = null;
     this.agent.emitStatusUpdated();
   }
 
@@ -101,6 +139,17 @@ export class PlanMode {
 
   get planFilePath(): PlanFilePath {
     return this._planFilePath;
+  }
+
+  get specDocuments(): SpecDocumentPaths | null {
+    return this._specDocuments;
+  }
+
+  get writableFilePaths(): readonly string[] {
+    if (this._planFilePath === null) return [];
+    return this._specDocuments === null
+      ? [this._planFilePath]
+      : [this._specDocuments.spec, this._specDocuments.design];
   }
 
   async data(): Promise<PlanData> {
@@ -118,9 +167,30 @@ export class PlanMode {
     };
   }
 
+  async specificationData(): Promise<SpecificationData | null> {
+    const path = this._specDocuments?.spec;
+    if (path === undefined) return null;
+
+    let content = '';
+    try {
+      content = await this.agent.kaos.readText(path);
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error;
+    }
+    return {
+      path,
+      content,
+      missingSections: missingSpecificationSections(content),
+    };
+  }
+
   private async writeEmptyPlanFile(path: string): Promise<void> {
     await this.ensurePlanDirectory(path);
     await this.agent.kaos.writeText(path, '');
+  }
+
+  private async writeSpecTemplate(path: string): Promise<void> {
+    await this.agent.kaos.writeText(path, SPEC_TEMPLATE);
   }
 
   private async ensurePlanDirectory(path: string): Promise<void> {
@@ -137,6 +207,34 @@ export class PlanMode {
         : join(this.agent.homedir, 'plans');
     return join(plansDir, `${id}.md`);
   }
+
+  private specDocumentsFor(id: string): SpecDocumentPaths | null {
+    if (!this.agent.experimentalFlags.enabled('spec-coding')) return null;
+    const root = join(this.agent.config.cwd, 'specs', id);
+    return {
+      root,
+      spec: join(root, 'spec.md'),
+      design: join(root, 'design.md'),
+    };
+  }
+}
+
+export function missingSpecificationSections(
+  content: string,
+): readonly RequiredSpecificationSection[] {
+  const lines = content.split(/\r?\n/);
+  return REQUIRED_SPECIFICATION_SECTIONS.filter((section) => {
+    const headingIndex = lines.findIndex((line) => line.trim() === `## ${section}`);
+    if (headingIndex === -1) return true;
+    const nextHeadingIndex = lines.findIndex(
+      (line, index) => index > headingIndex && /^##\s+/.test(line),
+    );
+    const sectionContent = lines
+      .slice(headingIndex + 1, nextHeadingIndex === -1 ? undefined : nextHeadingIndex)
+      .join('\n')
+      .trim();
+    return sectionContent.length === 0;
+  });
 }
 
 function isMissingFileError(error: unknown): boolean {
