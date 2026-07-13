@@ -1,5 +1,9 @@
 import type { ExecutableToolResult } from '../loop';
 import {
+  finalizedSpecRunAt,
+  SPEC_DELIVERY_STORE_KEY,
+} from '../tools/builtin/state/spec-run-state';
+import {
   SPEC_TASK_ACTIVE_STORE_KEY,
   SPEC_TASK_STORE_KEY,
   SPEC_TASK_TRACE_STORE_KEY,
@@ -23,6 +27,7 @@ export class SpecTaskTracker {
 
   recordToolResult(input: SpecTaskToolResult): void {
     if (!this.agent.experimentalFlags.enabled('spec-coding')) return;
+    if (this.isRunFinalized()) return;
     if (!TRACEABLE_TOOL_NAMES.has(input.toolName)) return;
 
     const taskId = this.activeTaskId();
@@ -60,6 +65,10 @@ export class SpecTaskTracker {
   private traces(): readonly SpecTaskTrace[] {
     const value = this.agent.tools.storeData()[SPEC_TASK_TRACE_STORE_KEY];
     return Array.isArray(value) ? value.filter(isSpecTaskTrace) : [];
+  }
+
+  private isRunFinalized(): boolean {
+    return finalizedSpecRunAt(this.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]) !== undefined;
   }
 
   private traceFor(taskId: string, input: SpecTaskToolResult): SpecTaskTrace {

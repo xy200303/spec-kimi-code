@@ -4,6 +4,10 @@ import type { BuiltinTool } from '../../../agent/tool';
 import type { ToolExecution } from '../../../loop/types';
 import { toInputJsonSchema } from '../../support/input-schema';
 import type { ToolStore } from '../../store';
+import {
+  finalizedSpecRunAt,
+  SPEC_DELIVERY_STORE_KEY,
+} from './spec-run-state';
 import DESCRIPTION from './spec-task-list.md?raw';
 
 export const SPEC_TASK_LIST_TOOL_NAME = 'SpecTaskList' as const;
@@ -122,6 +126,13 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
       description: isQuery ? 'Reading spec task list' : 'Updating spec task list',
       approvalRule: this.name,
       execute: async () => {
+        const finalizedAt = this.finalizedAt();
+        if (!isQuery && finalizedAt !== undefined) {
+          return {
+            isError: true,
+            output: `Spec task ledger was finalized at ${finalizedAt}. Start a new spec run to change tasks.`,
+          };
+        }
         const tasks = args.tasks ?? this.getTasks();
         if (args.tasks !== undefined) {
           this.setTasks(tasks);
@@ -175,6 +186,11 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
 
   private getTraces(): readonly SpecTaskTrace[] {
     return this.store.get(SPEC_TASK_TRACE_STORE_KEY) ?? [];
+  }
+
+  private finalizedAt(): string | undefined {
+    const context = this.store.get(SPEC_DELIVERY_STORE_KEY);
+    return finalizedSpecRunAt(context);
   }
 }
 

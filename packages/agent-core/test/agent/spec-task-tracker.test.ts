@@ -7,6 +7,10 @@ import {
   SPEC_TASK_TRACE_STORE_KEY,
   type SpecTask,
 } from '../../src/tools/builtin/state/spec-task-list';
+import {
+  SPEC_DELIVERY_STORE_KEY,
+  type SpecDeliveryContext,
+} from '../../src/tools/builtin/state/spec-delivery';
 import { testAgent } from './harness/agent';
 
 // Scenarios: tool outcomes are bound to the active task. Wiring: a real test agent and tool store.
@@ -88,5 +92,41 @@ describe('SpecTaskTracker', () => {
         delegation: undefined,
       },
     ]);
+  });
+
+  it('does not trace tools after the spec run has been finalized', () => {
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+    });
+    const tasks: readonly SpecTask[] = [
+      {
+        id: 'task-finalized',
+        title: 'Preserve final delivery',
+        status: 'done',
+        reason: 'Keep later changes out of the finalized run.',
+      },
+    ];
+    const delivery: SpecDeliveryContext = {
+      root: '/workspace/specs/finalized-run',
+      spec: '/workspace/specs/finalized-run/spec.md',
+      design: '/workspace/specs/finalized-run/design.md',
+      delivery: '/workspace/specs/finalized-run/delivery.md',
+      deliveryJson: '/workspace/specs/finalized-run/delivery.json',
+      qualityGate: 'standard',
+      finalizedAt: '2026-07-13T01:02:03.000Z',
+    };
+    ctx.agent.tools.updateStore(SPEC_TASK_STORE_KEY, tasks);
+    ctx.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, 'task-finalized');
+    ctx.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, delivery);
+
+    ctx.agent.specTaskTracker.recordToolResult({
+      toolCallId: 'call-finalized-write',
+      toolName: 'Write',
+      args: { path: '/workspace/src/example.ts', content: 'export {}' },
+      result: { output: 'written' },
+    });
+
+    expect(ctx.agent.tools.storeData()[SPEC_TASK_STORE_KEY]).toEqual(tasks);
+    expect(ctx.agent.tools.storeData()[SPEC_TASK_TRACE_STORE_KEY]).toBeUndefined();
   });
 });

@@ -7,16 +7,18 @@ import type { ExecutableToolResult, ToolExecution } from '../../../loop/types';
 import { toInputJsonSchema } from '../../support/input-schema';
 import type { ToolStore } from '../../store';
 import {
+  SPEC_TASK_ACTIVE_STORE_KEY,
   SPEC_TASK_STORE_KEY,
   SPEC_TASK_TRACE_STORE_KEY,
   type SpecTaskCategory,
   type SpecTask,
   type SpecTaskTrace,
 } from './spec-task-list';
+import { SPEC_DELIVERY_STORE_KEY } from './spec-run-state';
 import DESCRIPTION from './spec-delivery.md?raw';
 
 export const SPEC_DELIVERY_TOOL_NAME = 'SpecDelivery' as const;
-export const SPEC_DELIVERY_STORE_KEY = 'specDelivery' as const;
+export { SPEC_DELIVERY_STORE_KEY } from './spec-run-state';
 
 export type SpecQualityGate = 'fast' | 'standard' | 'strict' | 'release';
 export type SpecDevelopmentStrategy =
@@ -272,6 +274,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
     }
     if (finalizedAt !== undefined) {
       this.store.set(SPEC_DELIVERY_STORE_KEY, { ...context, finalizedAt });
+      this.store.set(SPEC_TASK_ACTIVE_STORE_KEY, null);
     }
     return {
       output:

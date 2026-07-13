@@ -9,6 +9,7 @@ import {
 } from '../../src/tools/builtin/state/spec-delivery';
 import { SpecRunTool } from '../../src/tools/builtin/state/spec-run';
 import {
+  SPEC_TASK_ACTIVE_STORE_KEY,
   SPEC_TASK_STORE_KEY,
   SPEC_TASK_TRACE_STORE_KEY,
   type SpecTask,
@@ -463,6 +464,7 @@ describe('SpecDeliveryTool', () => {
         reason: 'Close the approved work.',
       },
     ]);
+    store.set(SPEC_TASK_ACTIVE_STORE_KEY, 'task-complete');
     store.set(SPEC_TASK_TRACE_STORE_KEY, [
       {
         taskId: 'task-complete',
@@ -527,6 +529,7 @@ describe('SpecDeliveryTool', () => {
     expect(update.output).toContain('Delivery records were finalized at');
     expect(files.get(context.delivery)).toBe(delivery);
     expect(files.get(context.deliveryJson)).toBe(manifest);
+    expect(store.get(SPEC_TASK_ACTIVE_STORE_KEY)).toBeNull();
   });
 
   it('rejects completion when quality evidence belongs to no completed task', async () => {

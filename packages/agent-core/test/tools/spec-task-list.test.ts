@@ -10,12 +10,16 @@ import {
   type SpecTask,
   type SpecTaskTrace,
 } from '../../src/tools/builtin/state/spec-task-list';
+import {
+  SPEC_DELIVERY_STORE_KEY,
+  type SpecDeliveryContext,
+} from '../../src/tools/builtin/state/spec-delivery';
 import type { ToolStore } from '../../src/tools/store';
 import { executeTool } from './fixtures/execute-tool';
 
 const signal = new AbortController().signal;
 
-function makeTool(initial: readonly SpecTask[] = []): {
+function makeTool(initial: readonly SpecTask[] = [], finalizedAt?: string): {
   tool: SpecTaskListTool;
   getTasks(): readonly SpecTask[];
   setTraces(traces: readonly SpecTaskTrace[]): void;
@@ -23,6 +27,18 @@ function makeTool(initial: readonly SpecTask[] = []): {
   let tasks = [...initial];
   let activeTaskId: string | null = null;
   let traces: readonly SpecTaskTrace[] = [];
+  const deliveryContext: SpecDeliveryContext | null =
+    finalizedAt === undefined
+      ? null
+      : {
+          root: '/workspace/specs/finalized-run',
+          spec: '/workspace/specs/finalized-run/spec.md',
+          design: '/workspace/specs/finalized-run/design.md',
+          delivery: '/workspace/specs/finalized-run/delivery.md',
+          deliveryJson: '/workspace/specs/finalized-run/delivery.json',
+          qualityGate: 'standard',
+          finalizedAt,
+        };
   const store: ToolStore = {
     get: (key) => {
       const value =
@@ -30,9 +46,11 @@ function makeTool(initial: readonly SpecTask[] = []): {
           ? tasks
           : key === SPEC_TASK_TRACE_STORE_KEY
             ? traces
-            : key === SPEC_TASK_ACTIVE_STORE_KEY
-              ? activeTaskId
-              : undefined;
+            : key === SPEC_DELIVERY_STORE_KEY
+              ? deliveryContext
+              : key === SPEC_TASK_ACTIVE_STORE_KEY
+                ? activeTaskId
+                : undefined;
       return value as never;
     },
     set: (key, value) => {
@@ -190,6 +208,51 @@ describe('SpecTaskListTool', () => {
 
     expect(update).toMatchObject({ isError: false });
     expect(query.output).toContain('Active spec task: task-track-changes');
+  });
+
+  it('rejects task updates when the spec run has been finalized', async () => {
+    const task: SpecTask = {
+      id: 'task-finalized',
+      title: 'Keep finalized ledger immutable',
+      status: 'done',
+      reason: 'Preserve the completed delivery evidence.',
+    };
+    const { tool, getTasks } = makeTool([task], '2026-07-13T01:02:03.000Z');
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-finalized-update',
+      args: { activeTaskId: null },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('Spec task ledger was finalized at');
+    expect(getTasks()).toEqual([task]);
+  });
+
+  it('returns the finalized task ledger in query mode', async () => {
+    const { tool } = makeTool(
+      [
+        {
+          id: 'task-finalized',
+          title: 'Preserve final delivery',
+          status: 'done',
+          reason: 'Keep the completed evidence available for review.',
+        },
+      ],
+      '2026-07-13T01:02:03.000Z',
+    );
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-finalized-query',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: false });
+    expect(result.output).toContain('task-finalized');
   });
 
   it('renders tracked command and file-change details', async () => {
