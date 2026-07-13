@@ -336,7 +336,6 @@ interface DeliveryRecordInput {
 }
 
 function renderDeliveryRecord(input: DeliveryRecordInput): string {
-  const changes = changedPaths(input.tasks, input.traces);
   const designRisks = markdownSection(input.design, 'Risks');
   return `# Delivery Record
 
@@ -380,7 +379,7 @@ ${renderTasks(input.tasks)}
 
 ## Changes
 
-${renderList(changes, 'No file changes recorded.')}
+${renderChanges(input.tasks, input.traces)}
 
 ## Evidence
 
@@ -459,16 +458,33 @@ function renderApproval(approval: SpecApprovalRecord | undefined): string {
   ].join('\n');
 }
 
-function changedPaths(
+function renderChanges(
   tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
-): readonly string[] {
-  return [
+): string {
+  const entries = tasks.flatMap((task) => changeEntriesForTask(task, traces));
+  return entries.length === 0 ? 'No file changes recorded.' : entries.join('\n');
+}
+
+function changeEntriesForTask(task: SpecTask, traces: readonly SpecTaskTrace[]): readonly string[] {
+  const taskTraces = traces.filter((trace) => trace.taskId === task.id);
+  const paths = [
     ...new Set([
-      ...tasks.flatMap((task) => task.changedPaths ?? []),
-      ...traces.flatMap((trace) => trace.changedPaths ?? []),
+      ...(task.changedPaths ?? []),
+      ...taskTraces.flatMap((trace) => trace.changedPaths ?? []),
     ]),
   ];
+  const toolCalls = taskTraces.map((trace) => `${trace.toolName} (${trace.toolCallId})`);
+  return paths.map((path) =>
+    [
+      `- \`${path}\``,
+      `  Task: ${task.id} — ${task.title}`,
+      `  Reason: ${task.reason}`,
+      ...(task.risk === undefined ? [] : [`  Risk: ${task.risk}`]),
+      ...(task.category === undefined ? [] : [`  Category: ${task.category}`]),
+      ...(toolCalls.length === 0 ? [] : [`  Tool calls: ${toolCalls.join(', ')}`]),
+    ].join('\n'),
+  );
 }
 
 function renderEvidence(

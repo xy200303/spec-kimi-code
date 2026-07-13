@@ -170,6 +170,7 @@ describe('SpecDeliveryTool', () => {
         title: 'Create delivery record',
         status: 'done',
         reason: 'Provide an auditable handoff.',
+        risk: 'medium',
         changedPaths: ['src/delivery.ts'],
       },
     ];
@@ -217,6 +218,10 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('Selected: bug_diagnosis');
     expect(files.get(context.delivery)).toContain('Recommended quality gate: strict');
     expect(files.get(context.delivery)).toContain('src/delivery.ts');
+    expect(files.get(context.delivery)).toContain('Task: task-delivery — Create delivery record');
+    expect(files.get(context.delivery)).toContain('Reason: Provide an auditable handoff.');
+    expect(files.get(context.delivery)).toContain('Risk: medium');
+    expect(files.get(context.delivery)).toContain('Tool calls: Bash (call-test)');
     expect(files.get(context.delivery)).toContain('[succeeded] pnpm test delivery');
   });
 
