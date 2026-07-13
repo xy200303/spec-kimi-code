@@ -28,7 +28,7 @@ class SpecRunsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   }
 
   async getChildren(item?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
-    if (item?.resourceUri !== undefined) return ['spec.md', 'design.md', 'delivery.md'].map((name) => {
+    if (item?.resourceUri !== undefined) return ['spec.md', 'design.md', 'delivery.md', 'delivery.json'].map((name) => {
       const child = new vscode.TreeItem(name);
       child.command = { command: 'vscode.open', title: `Open ${name}`, arguments: [vscode.Uri.joinPath(item.resourceUri!, name)] };
       return child;
