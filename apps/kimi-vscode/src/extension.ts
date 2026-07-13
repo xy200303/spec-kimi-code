@@ -27,7 +27,12 @@ class SpecRunsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     return item;
   }
 
-  async getChildren(): Promise<vscode.TreeItem[]> {
+  async getChildren(item?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
+    if (item?.resourceUri !== undefined) return ['spec.md', 'design.md', 'delivery.md'].map((name) => {
+      const child = new vscode.TreeItem(name);
+      child.command = { command: 'vscode.open', title: `Open ${name}`, arguments: [vscode.Uri.joinPath(item.resourceUri!, name)] };
+      return child;
+    });
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (folder === undefined) return [];
     const specs = vscode.Uri.joinPath(folder.uri, SPECS_DIRECTORY);
@@ -35,13 +40,8 @@ class SpecRunsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     return runs
       .filter(([, type]) => type === vscode.FileType.Directory)
       .map(([run]) => {
-        const item = new vscode.TreeItem(run, vscode.TreeItemCollapsibleState.None);
-        item.command = {
-          command: 'vscode.open',
-          title: 'Open specification',
-          arguments: [vscode.Uri.joinPath(specs, run, 'spec.md')],
-        };
-        item.description = 'spec.md';
+        const item = new vscode.TreeItem(run, vscode.TreeItemCollapsibleState.Collapsed);
+        item.resourceUri = vscode.Uri.joinPath(specs, run);
         return item;
       });
   }
