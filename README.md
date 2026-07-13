@@ -1,132 +1,67 @@
-# Kimi Code CLI
+# Spec Kimi
 
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Docs](https://img.shields.io/badge/docs-online-blue)](https://moonshotai.github.io/kimi-code/en/) <br>
-[Documentation](https://moonshotai.github.io/kimi-code/en/) · [Issues](https://github.com/MoonshotAI/kimi-code/issues) · [中文](README.zh-CN.md)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) · [中文](README.zh-CN.md)
 
-![Demo of using Kimi Code](./docs/media/intro.gif)
+Spec Kimi is a secondary development based on [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code). It keeps the upstream terminal agent foundation and changes the development model from an unstructured conversation into a traceable, spec-driven workflow.
 
-## What is Kimi Code CLI
+The executable for this distribution is `spec-kimi`. It is intentionally different from the upstream `kimi` command so the two installations do not conflict.
 
-Kimi Code CLI is an AI coding agent that runs in your terminal — it can read and edit code, run shell commands, search files, fetch web pages, and choose the next step based on the feedback it receives. It works out of the box with Moonshot AI’s Kimi models and can also be configured to use other compatible providers.
+## Distribution
 
-## Install
-
-Install with the official script. No Node.js required.
-
-- **macOS or Linux**:
+This repository does not provide upstream download links, Homebrew commands, or upstream registry installation commands. Install only the `.tgz` artifact produced by this project:
 
 ```sh
-curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
+npm install -g /absolute/path/to/spec-kimi-<version>.tgz
+spec-kimi --version
 ```
 
-- **Homebrew (macOS/Linux)**:
+The Node.js runtime must be available on `PATH` before running the command. The package is intended for local or controlled distribution; do not substitute an upstream package or installer for this artifact.
 
-```sh
-brew install kimi-code
-```
+## What changes in this distribution
 
-- **Windows (PowerShell)**:
+Interactive `spec-kimi` sessions always enable Spec Coding and start in Plan mode. `spec-kimi --plan` is an explicit equivalent, not a separate development mode. This makes the normal development path:
 
-```powershell
-irm https://code.kimi.com/kimi-code/install.ps1 | iex
-```
+1. State the goal, constraints, scope, and acceptance criteria.
+2. Inspect the project and prepare a specification and design for review.
+3. Approve a stable snapshot before implementation.
+4. Execute traceable tasks with risk-aware approvals and recorded changes.
+5. Verify the result and finalize a delivery record with evidence.
 
-> On Windows, install [Git for Windows](https://gitforwindows.org/) before first launch because Kimi Code CLI uses the bundled Git Bash as its shell environment. If Git Bash is installed in a custom location, set `KIMI_SHELL_PATH` to the absolute path of `bash.exe`.
+`spec-kimi -p` remains a non-interactive output interface. It cannot show or approve a plan, so it is not the workflow for an auditable development change.
 
-Then, run it with a new shell session:
+## Spec Coding capabilities
 
-```sh
-kimi --version
-```
+- **Project-local records**: every run writes to `specs/<run-id>/` in the project root. The directory contains `spec.md`, `design.md`, `delivery.md`, and machine-readable `delivery.json`, so the design and evidence travel with the project instead of being hidden in a system directory.
+- **Goal and approval locking**: the approved specification and design are snapshotted before execution. Later drift is detected rather than silently changing the agreed target.
+- **Strategy routing**: the development strategy router selects an approach such as controlled feature work, bug diagnosis, refactoring, review, release, research, planning, or an MVP. The selected strategy records its reason, required task categories, and recommended quality gate.
+- **Traceable execution**: tasks have a purpose, state, risk level, changed paths, commands, and delegated work traces. Tool changes can be attributed to the active task.
+- **Risk-aware controls**: low-, medium-, and high-risk tasks use different approval requirements. Approval decisions remain part of the run record.
+- **Evidence-based delivery**: `fast`, `standard`, `strict`, and `release` quality gates require progressively stronger evidence. A complete delivery records the goal, constraints, plan, tasks, changes, evidence, decisions, risks, open questions, and rollback notes.
+- **Finalization**: finalized delivery records are locked so later work cannot silently rewrite the completed audit trail.
 
-For npm install, upgrade, uninstall, see [Getting Started](https://moonshotai.github.io/kimi-code/en/guides/getting-started).
+## Quick start
 
-## Quick Start
-
-Open a project and start the interactive UI:
+Open a project and start the interactive workflow:
 
 ```sh
 cd your-project
-kimi
+spec-kimi
 ```
 
-On first launch, run `/login` inside Kimi Code CLI and choose either Kimi Code OAuth or a Moonshot AI Open Platform API key. After login, try your first task:
+Describe the desired outcome and constraints. Review the files under `specs/<run-id>/` before approving implementation. See the in-repository [Spec Coding guide](docs/en/guides/spec-coding.md) for the full workflow and artifact layout.
 
-```
-Take a look at this project and explain its main directories.
-```
+## Development
 
-## Key Features
-
-- **Single-binary distribution.** Install with one command: no Node.js setup, PATH gymnastics, or global module conflicts.
-- **Blazing-fast startup.** The TUI is ready in milliseconds, so starting a session never feels heavy.
-- **Purpose-built TUI.** A carefully tuned interface, optimized end to end for long, focused agent sessions.
-- **Video input.** Drop a screen recording or demo clip into the chat and let the agent watch what is hard to describe in words — turn a reference clip into a LUT, a long video into a short, a screen recording into working code, and more.
-- **AI-native MCP configuration.** Add, edit, and authenticate Model Context Protocol servers conversationally with `/mcp-config`, without hand-editing JSON.
-- **Rich plugin ecosystem.** Install skills, MCP servers, and data sources from the marketplace or any GitHub repo, with each install's trust level surfaced up front.
-- **Subagents for focused, parallel work.** Dispatch built-in `coder`, `explore`, and `plan` subagents in isolated contexts while keeping the main conversation clean.
-- **Lifecycle hooks.** Run local commands at key points to gate risky tool calls, audit decisions, trigger desktop notifications, or connect to your own automation.
-- **Editor & IDE integration (ACP).** Drive a Kimi Code CLI session straight from Zed, JetBrains, or any [Agent Client Protocol](https://agentclientprotocol.com/) client with `kimi acp`.
-
-## Use it in your editor (ACP)
-
-Kimi Code CLI speaks the [Agent Client Protocol](https://agentclientprotocol.com/), so ACP-compatible editors and IDEs (Zed, JetBrains, …) can drive a session over stdio. Log in once, then point your editor at the `kimi acp` subcommand — no extra login needed.
-
-For Zed, add this to `~/.config/zed/settings.json`:
-
-```json
-{
-  "agent_servers": {
-    "Kimi Code CLI": {
-      "type": "custom",
-      "command": "kimi",
-      "args": ["acp"],
-      "env": {}
-    }
-  }
-}
-```
-
-Then open a new conversation in Zed's Agent panel. See [Using in IDEs](https://moonshotai.github.io/kimi-code/en/guides/ides) for JetBrains setup and troubleshooting, and the [`kimi acp` reference](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp) for the full capability matrix.
-
-## Docs
-
-- [Getting Started](https://moonshotai.github.io/kimi-code/en/guides/getting-started)
-- [Interaction and approvals](https://moonshotai.github.io/kimi-code/en/guides/interaction)
-- [Sessions](https://moonshotai.github.io/kimi-code/en/guides/sessions)
-- [Using in IDEs (ACP)](https://moonshotai.github.io/kimi-code/en/guides/ides)
-- [Configuration](https://moonshotai.github.io/kimi-code/en/configuration/config-files)
-- [Command reference](https://moonshotai.github.io/kimi-code/en/reference/kimi-command)
-
-## Develop
-
-Requirements: Node.js ≥ 24.15.0, pnpm 10.33.0.
+Requirements: Node.js >= 24.15.0 and pnpm 10.33.0.
 
 ```sh
-git clone https://github.com/MoonshotAI/kimi-code.git
-cd kimi-code
 pnpm install
+pnpm --dir apps/kimi-code run dev
+pnpm --filter @moonshot-ai/kimi-code run typecheck
 ```
 
-```sh
-pnpm dev:cli    # run the CLI in dev mode
-pnpm test       # run tests
-pnpm typecheck  # TypeScript check
-pnpm lint       # oxlint
-pnpm build      # build all packages
-```
+## Upstream and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide.
-
-## Community
-
-- [Issues](https://github.com/MoonshotAI/kimi-code/issues)
-- For security vulnerabilities, see [SECURITY.md](SECURITY.md).
-
-## Acknowledgements
-
-Our TUI is built on top of [`pi-tui`](https://github.com/earendil-works/pi-mono/tree/main/packages/tui). We thank the authors of `pi-tui` for their valuable work.
-
-## License
+Spec Kimi is derived from [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code). Upstream product documentation and installation channels describe the upstream product, not this distribution.
 
 Released under the [MIT License](LICENSE).

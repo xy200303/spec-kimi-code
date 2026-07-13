@@ -1,15 +1,15 @@
-# `kimi` Command
+# `spec-kimi` Command
 
-`kimi` is the main command for Kimi Code CLI, used to start an interactive session in the terminal. Running it without any arguments opens a new session in the current working directory; combined with different flags, you can resume a previous session, skip approvals, start in Plan mode, or load Skills from a custom directory.
+`spec-kimi` is the main command for Spec Kimi, a secondary development based on Kimi Code. Running it without arguments opens an interactive, spec-driven session in the current working directory. It enables Spec Coding and Plan mode by default; flags can resume a session, adjust permissions, or load Skills from a custom directory.
 
 ```sh
-kimi [options]
-kimi <subcommand> [options]
+spec-kimi [options]
+spec-kimi <subcommand> [options]
 ```
 
 ## Main Command Options
 
-All flags are optional — run `kimi` directly to enter an interactive session:
+All flags are optional — run `spec-kimi` directly to enter an interactive session:
 
 | Option | Short | Description |
 | --- | --- | --- |
@@ -18,11 +18,11 @@ All flags are optional — run `kimi` directly to enter an interactive session:
 | `--session [id]` | `-S` | Resume a session. With an ID, opens that session directly; without an ID, enters an interactive selector |
 | `--continue` | `-c` | Continue the most recent session in the current working directory, without specifying an ID manually |
 | `--model <model>` | `-m` | Specify a model alias for this launch. When omitted, new sessions use `default_model` from the config file |
-| `--prompt <prompt>` | `-p` | Run a single prompt non-interactively and stream the Assistant output to stdout. This mode does not open the TUI |
+| `--prompt <prompt>` | `-p` | Run a single prompt non-interactively and stream the Assistant output to stdout. This mode does not open the TUI or support plan review and approval |
 | `--output-format <format>` | | Set the non-interactive output format; supports `text` and `stream-json`. Can only be used with `--prompt`; defaults to `text` |
 | `--yolo` | `-y` | Auto-approve regular tool calls, skipping approval requests |
 | `--auto` | | Start with auto permission mode; tool approvals are handled automatically and the Agent will not ask the user questions |
-| `--plan` | | Start a new session in Plan mode — the AI will prioritize read-only tools for exploration and planning |
+| `--plan` | | Explicitly state the default interactive behavior: start in Spec Coding Plan mode |
 | `--skills-dir <dir>` | | Load Skills from the specified directory, replacing the automatically discovered user and project directories. Can be repeated |
 | `--add-dir <dir>` | | Add an extra workspace directory for this session. Relative paths resolve against the current working directory. Can be repeated |
 
@@ -41,45 +41,45 @@ The following combinations are rejected at startup:
 - `--prompt` cannot be used with `--yolo`, `--auto`, or `--plan` — non-interactive mode uses `auto` permission by default
 - `--output-format` can only be used together with `--prompt`
 
-When resuming a session, you can override its saved permission or plan mode by adding `--auto`, `--yolo`, or `--plan`. For example, `kimi --continue --auto` resumes the latest session and switches it to auto permission mode.
+When resuming a session, you can override its saved permission or plan mode by adding `--auto`, `--yolo`, or `--plan`. For example, `spec-kimi --continue --auto` resumes the latest session and switches it to auto permission mode.
 
 ## Common Usage
 
 Start a new session directly:
 
 ```sh
-kimi
+spec-kimi
 ```
 
 Pick up where you left off (automatically finds the most recent session in the current directory):
 
 ```sh
-kimi --continue
+spec-kimi --continue
 ```
 
 Choose from the session history list, or specify a known ID directly:
 
 ```sh
-kimi --session
-kimi --session 01HZ...XYZ
+spec-kimi --session
+spec-kimi --session 01HZ...XYZ
 ```
 
 Skip approval prompts — suitable for batch tasks that are known to be safe:
 
 ```sh
-kimi --yolo
+spec-kimi --yolo
 ```
 
 Let the Agent handle everything autonomously, without asking the user questions:
 
 ```sh
-kimi --auto
+spec-kimi --auto
 ```
 
-Read the code and produce an implementation plan before making any file changes:
+Explicitly state the default plan-first behavior:
 
 ```sh
-kimi --plan
+spec-kimi --plan
 ```
 
 ### Custom Skills Directories
@@ -89,17 +89,17 @@ There are two ways to specify Skills directories, with different semantics:
 - **`--skills-dir <dir>`** (CLI flag): **Replaces** the automatically discovered user and project directories for this launch only. Can be repeated to stack multiple directories:
 
   ```sh
-  kimi --skills-dir /path/to/team-skills --skills-dir ./local-skills
+  spec-kimi --skills-dir /path/to/team-skills --skills-dir ./local-skills
   ```
 
 - **`extra_skill_dirs`** (`config.toml`): **Adds** directories on top of the automatically discovered ones, taking effect permanently. Suitable for configuring team-shared Skills. See [Agent Skills](../customization/skills.md).
 
 ## Non-Interactive Execution
 
-When running a single prompt in a script or CI environment, use `-p`:
+When running a single prompt in a script or CI environment, use `-p` only for output-oriented work. It is not a substitute for the interactive Spec Coding workflow:
 
 ```sh
-kimi -p "Summarize the current repository status"
+spec-kimi -p "Summarize the current repository status"
 ```
 
 Output uses a transcript style: thinking content and Assistant text are both prefixed with `• `, and wrapped lines are indented by two spaces. Assistant text goes to stdout; thinking, tool progress, and "resuming session" notices go to stderr. In `-p` mode, no human approval is requested — regular tool calls are handled under the `auto` permission policy, while static deny rules remain in effect.
@@ -107,54 +107,54 @@ Output uses a transcript style: thinking content and Assistant text are both pre
 Temporarily switch the model:
 
 ```sh
-kimi -m kimi-code/kimi-for-coding -p "Explain the latest diff"
+spec-kimi -m kimi-code/kimi-for-coding -p "Explain the latest diff"
 ```
 
 When you need to parse output programmatically, use the `stream-json` format — each line on stdout is a JSON object:
 
 ```sh
-kimi -p "List changed files" --output-format stream-json
+spec-kimi -p "List changed files" --output-format stream-json
 ```
 
 In `stream-json` mode, regular replies produce an Assistant message; when the model calls a tool, an Assistant message with `tool_calls` is emitted first, followed by the corresponding Tool message, then subsequent Assistant messages. Thinking content is not written to JSONL; tool progress and "resuming session" notices are still written to stderr.
 
 ## Subcommands
 
-`kimi` provides the following subcommands: `login` (non-interactive login), `acp` (ACP IDE mode), `server` (run and manage the local REST/WebSocket/web service), `web` (alias for `kimi server run --open`), `doctor` (validate configuration files), `export` (export a session), `migrate` (migrate legacy data), `upgrade` (check for updates), and `provider` (manage providers).
+`spec-kimi` provides the following subcommands: `login` (non-interactive login), `acp` (ACP IDE mode), `server` (run and manage the local REST/WebSocket/web service), `web` (alias for `spec-kimi server run --open`), `doctor` (validate configuration files), `export` (export a session), `migrate` (migrate legacy data), `upgrade` (check for updates), and `provider` (manage providers).
 
-### `kimi login`
+### `spec-kimi login`
 
-Log in to Kimi Code OAuth via the RFC 8628 device-code flow, without entering the TUI. The command issues a device authorization request, prints the verification URL and user code to stderr, then polls until the browser-side authorization is complete. The generated token is written to the same local location as TUI `/login` and is loaded automatically the next time `kimi` starts.
+Log in to Kimi Code OAuth via the RFC 8628 device-code flow, without entering the TUI. The command issues a device authorization request, prints the verification URL and user code to stderr, then polls until the browser-side authorization is complete. The generated token is written to the same local location as TUI `/login` and is loaded automatically the next time `spec-kimi` starts.
 
 ```sh
-kimi login
+spec-kimi login
 ```
 
 This subcommand has no flags. Press `Ctrl-C` at any time during polling to cancel; the exit code is `1` on cancellation or failure, and `0` on success.
 
-### `kimi acp`
+### `spec-kimi acp`
 
-Switch Kimi Code CLI to ACP (Agent Client Protocol) mode, communicating with an IDE via JSON-RPC over stdin/stdout so the editor can directly drive kimi's sessions and tool calls. You typically do not need to run this manually — the IDE starts it as a subprocess entry point. For configuration, see [Using in IDEs](../guides/ides.md); for technical details, see the [kimi acp reference](./kimi-acp.md).
+Switch Kimi Code CLI to ACP (Agent Client Protocol) mode, communicating with an IDE via JSON-RPC over stdin/stdout so the editor can directly drive spec-kimi's sessions and tool calls. You typically do not need to run this manually — the IDE starts it as a subprocess entry point. For configuration, see [Using in IDEs](../guides/ides.md); for technical details, see the [spec-kimi acp reference](./kimi-acp.md).
 
 ```sh
-kimi acp
+spec-kimi acp
 ```
 
-### `kimi server`
+### `spec-kimi server`
 
-Run, install, and manage the local Kimi server — a single process that exposes the REST + WebSocket API and serves the web UI from the same origin. The parent command is split into an on-demand entrypoint (`run`) and an OS-managed service lifecycle (`install`, `uninstall`, `start`, `stop`, `restart`, `status`). `kimi server run` ensures a single background daemon is running and returns once it is healthy; pass `--foreground` to keep the server attached to the current terminal instead.
+Run, install, and manage the local Kimi server — a single process that exposes the REST + WebSocket API and serves the web UI from the same origin. The parent command is split into an on-demand entrypoint (`run`) and an OS-managed service lifecycle (`install`, `uninstall`, `start`, `stop`, `restart`, `status`). `spec-kimi server run` ensures a single background daemon is running and returns once it is healthy; pass `--foreground` to keep the server attached to the current terminal instead.
 
 When the server is running, `GET /openapi.json` returns the REST OpenAPI document and `GET /asyncapi.json` returns the local WebSocket AsyncAPI document.
 
 ```sh
-kimi server run                # start or reuse a background daemon
-kimi server run --foreground   # run attached to the current terminal
-kimi server install            # register with launchd / systemd / schtasks
-kimi server start              # start the OS-managed service
-kimi server status             # snapshot of installed/running state
+spec-kimi server run                # start or reuse a background daemon
+spec-kimi server run --foreground   # run attached to the current terminal
+spec-kimi server install            # register with launchd / systemd / schtasks
+spec-kimi server start              # start the OS-managed service
+spec-kimi server status             # snapshot of installed/running state
 ```
 
-#### `kimi server run`
+#### `spec-kimi server run`
 
 | Option | Description |
 | --- | --- |
@@ -166,13 +166,13 @@ kimi server status             # snapshot of installed/running state
 | `--foreground` | Run in the foreground instead of spawning a background daemon |
 | `--open` | Open the web UI in the default browser once the server is healthy |
 
-`kimi server run` binds to local loopback only. By default it spawns a single background daemon (reused across runs) and exits once the daemon is healthy; the daemon shuts itself down after the last web client disconnects. Pass `--keep-alive` to keep it running past the idle timeout, or `--foreground` to run the server in the current process instead — it then stays attached to the terminal and shuts down cleanly on `SIGINT` / `SIGTERM`.
+`spec-kimi server run` binds to local loopback only. By default it spawns a single background daemon (reused across runs) and exits once the daemon is healthy; the daemon shuts itself down after the last web client disconnects. Pass `--keep-alive` to keep it running past the idle timeout, or `--foreground` to run the server in the current process instead — it then stays attached to the terminal and shuts down cleanly on `SIGINT` / `SIGTERM`.
 
 ::: danger
-`--dangerous-bypass-auth` disables authentication entirely. Anyone who can reach the port gets full access to your sessions, filesystem, and shell. Only use it on a trusted network or behind your own authenticating reverse proxy, and run `kimi server kill` to stop the server when you are done.
+`--dangerous-bypass-auth` disables authentication entirely. Anyone who can reach the port gets full access to your sessions, filesystem, and shell. Only use it on a trusted network or behind your own authenticating reverse proxy, and run `spec-kimi server kill` to stop the server when you are done.
 :::
 
-#### `kimi server install`
+#### `spec-kimi server install`
 
 Register the server as an OS-managed service so it starts at login and restarts after a crash. The backend picks itself based on the running platform:
 
@@ -187,65 +187,65 @@ Register the server as an OS-managed service so it starts at login and restarts 
 | `--force` | Replace an existing install instead of failing |
 | `--json` | Output JSON instead of a human-readable line |
 
-The loopback host, chosen port, and log level are recorded to `~/.kimi-code/server/install.json` so `kimi server status` can report them even when the service is stopped.
+The loopback host, chosen port, and log level are recorded to `~/.kimi-code/server/install.json` so `spec-kimi server status` can report them even when the service is stopped.
 
 #### Lifecycle subcommands
 
 | Command | Description |
 | --- | --- |
-| `kimi server uninstall` | Stop and remove the OS service definition. Idempotent. |
-| `kimi server start` | Start the OS-managed service. Errors if not installed. |
-| `kimi server stop` | Stop the OS-managed service. |
-| `kimi server restart` | Restart the OS-managed service. |
-| `kimi server status` | Print installed / running / pid / port / log-path. `--json` for automation. |
+| `spec-kimi server uninstall` | Stop and remove the OS service definition. Idempotent. |
+| `spec-kimi server start` | Start the OS-managed service. Errors if not installed. |
+| `spec-kimi server stop` | Stop the OS-managed service. |
+| `spec-kimi server restart` | Restart the OS-managed service. |
+| `spec-kimi server status` | Print installed / running / pid / port / log-path. `--json` for automation. |
 
-#### `kimi web`
+#### `spec-kimi web`
 
 Opens Kimi's graphical session in the browser as an alternative to the terminal TUI.
 
-Equivalent to `kimi server run --open`: it starts a local Kimi server in the background (reusing one already running), opens the web UI in the default browser, and returns, leaving the server resident in the background. The only difference from `kimi server run` is that `--open` is enabled by default (auto-launches the browser); all other behavior is identical.
+Equivalent to `spec-kimi server run --open`: it starts a local Kimi server in the background (reusing one already running), opens the web UI in the default browser, and returns, leaving the server resident in the background. The only difference from `spec-kimi server run` is that `--open` is enabled by default (auto-launches the browser); all other behavior is identical.
 
 ```sh
-kimi web                 # start the server in the background and open the browser (reuses a running one)
-kimi web --no-open       # don't open the browser; same as `kimi server run`
-kimi web --foreground    # run attached to the current terminal and open the browser
+spec-kimi web                 # start the server in the background and open the browser (reuses a running one)
+spec-kimi web --no-open       # don't open the browser; same as `spec-kimi server run`
+spec-kimi web --foreground    # run attached to the current terminal and open the browser
 ```
 
-Stop the server with `kimi server kill` and list active connections with `kimi server ps`; `--port`, `--log-level`, and the other flags match `kimi server run`.
+Stop the server with `spec-kimi server kill` and list active connections with `spec-kimi server ps`; `--port`, `--log-level`, and the other flags match `spec-kimi server run`.
 
-### `kimi doctor`
+### `spec-kimi doctor`
 
 Validate `config.toml` and `tui.toml` without starting the TUI or modifying either file. By default, the command checks the files under `KIMI_CODE_HOME` (or `~/.kimi-code` when the environment variable is unset). Missing default files are reported as skipped because built-in defaults can apply.
 
 ```sh
-kimi doctor
+spec-kimi doctor
 ```
 
 | Command | Description |
 | --- | --- |
-| `kimi doctor` | Validate the default `config.toml` and `tui.toml` |
-| `kimi doctor config [path]` | Validate only `config.toml`, using `path` instead of the default file when provided |
-| `kimi doctor tui [path]` | Validate only `tui.toml`, using `path` instead of the default file when provided |
+| `spec-kimi doctor` | Validate the default `config.toml` and `tui.toml` |
+| `spec-kimi doctor config [path]` | Validate only `config.toml`, using `path` instead of the default file when provided |
+| `spec-kimi doctor tui [path]` | Validate only `tui.toml`, using `path` instead of the default file when provided |
 
 When an explicit path is passed, the file must exist. The command exits with `0` when all checked files are valid or skipped, and `1` when any requested file is missing or invalid.
 
 ```sh
 # Check the default config files
-kimi doctor
+spec-kimi doctor
 
 # Check only the default runtime config
-kimi doctor config
+spec-kimi doctor config
 
 # Check a candidate TUI config before replacing the live config
-kimi doctor tui ./tui.toml
+spec-kimi doctor tui ./tui.toml
 ```
 
-### `kimi export`
+### `spec-kimi export`
 
 Package a session into a ZIP file for sharing, archiving, or submitting bug reports.
 
 ```sh
-kimi export [sessionId] [options]
+spec-kimi export [sessionId] [options]
 ```
 
 | Parameter / Option | Short | Description |
@@ -259,41 +259,41 @@ The export contains all files in the target session directory. The global diagno
 
 ```sh
 # Export the most recent session in the current directory, skipping confirmation
-kimi export -y
+spec-kimi export -y
 
 # Export a specific session to a custom path
-kimi export 01HZ...XYZ -o ./bug-report.zip
+spec-kimi export 01HZ...XYZ -o ./bug-report.zip
 
 # Exclude the global diagnostic log
-kimi export 01HZ...XYZ -o ./bug-report.zip --no-include-global-log
+spec-kimi export 01HZ...XYZ -o ./bug-report.zip --no-include-global-log
 ```
 
-### `kimi migrate`
+### `spec-kimi migrate`
 
 Migrate local data from a legacy kimi-cli installation to kimi-code, including session history and configuration files. Runs entirely interactively, guiding you through the full process.
 
 ```sh
-kimi migrate
+spec-kimi migrate
 ```
 
 For full migration instructions, see [Migrating from kimi-cli](../guides/migration.md).
 
-### `kimi upgrade`
+### `spec-kimi upgrade`
 
-Immediately check for the latest version and display an update prompt; exits after you make a selection. `kimi update` is an alias for this command.
+Immediately check for the latest version and display an update prompt; exits after you make a selection. `spec-kimi update` is an alias for this command.
 
 ```sh
-kimi upgrade
+spec-kimi upgrade
 ```
 
-For global npm, pnpm, yarn, bun, and macOS / Linux native installations, `kimi upgrade` shows update options; selecting `Install update now` runs the corresponding foreground install command. When the current installation method cannot be upgraded automatically (e.g., Windows native installation), the manual update command is printed instead.
+For global npm, pnpm, yarn, bun, and macOS / Linux native installations, `spec-kimi upgrade` shows update options; selecting `Install update now` runs the corresponding foreground install command. When the current installation method cannot be upgraded automatically (e.g., Windows native installation), the manual update command is printed instead.
 
-### `kimi vis`
+### `spec-kimi vis`
 
 Launch the session visualizer in your browser to inspect a session as it unfolds. The command starts an in-process server pointed at your local sessions, prints the URL, opens your browser, and keeps running until you press `Ctrl-C`.
 
 ```sh
-kimi vis [sessionId] [options]
+spec-kimi vis [sessionId] [options]
 ```
 
 | Parameter / Option | Description |
@@ -305,26 +305,26 @@ kimi vis [sessionId] [options]
 
 ```sh
 # Start the visualizer and open the browser at the home view
-kimi vis
+spec-kimi vis
 
 # Open directly to a specific session
-kimi vis 01HZ...XYZ
+spec-kimi vis 01HZ...XYZ
 
 # Bind a fixed port and host without opening a browser (e.g. on a remote host)
-kimi vis --host 0.0.0.0 --port 8123 --no-open
+spec-kimi vis --host 0.0.0.0 --port 8123 --no-open
 ```
 
-### `kimi provider`
+### `spec-kimi provider`
 
 Manage providers in the shell — the non-interactive equivalent of `/provider` in the TUI. Suitable for scripted deployments, CI initialization, and one-line setup on a new machine.
 
 ```sh
-kimi provider <action> [options]
+spec-kimi provider <action> [options]
 ```
 
 Five actions are available:
 
-#### `kimi provider add <url>`
+#### `spec-kimi provider add <url>`
 
 Bulk-import all providers from a custom registry (`api.json`). The command fetches the registry, creates a `[providers.<id>]` and `[models.<alias>]` entry for each item, and writes `source` metadata so the TUI refreshes providers and models from the same registry URL automatically on next startup.
 
@@ -334,32 +334,32 @@ Bulk-import all providers from a custom registry (`api.json`). The command fetch
 | `--api-key <key>` | Bearer token for accessing the registry. Falls back to the `KIMI_REGISTRY_API_KEY` environment variable if not provided; required |
 
 ```sh
-kimi provider add https://registry.example.com/v1/models/api.json --api-key YOUR_KEY
+spec-kimi provider add https://registry.example.com/v1/models/api.json --api-key YOUR_KEY
 
 # Or via environment variable (suitable for CI / .envrc)
-KIMI_REGISTRY_API_KEY=YOUR_KEY kimi provider add https://registry.example.com/v1/models/api.json
+KIMI_REGISTRY_API_KEY=YOUR_KEY spec-kimi provider add https://registry.example.com/v1/models/api.json
 ```
 
 If a provider ID already exists, it is removed and re-created. The default model is not set automatically; you can select one later with `-m` or `/model` in the TUI.
 
-#### `kimi provider remove <providerId>`
+#### `spec-kimi provider remove <providerId>`
 
 Remove the specified provider and all its model aliases. If the removed provider is the one referenced by `default_model`, `default_model` is also cleared.
 
 ```sh
-kimi provider remove kohub
+spec-kimi provider remove kohub
 ```
 
-#### `kimi provider list`
+#### `spec-kimi provider list`
 
 Print each configured provider on a separate line, including type, model count, and source. Add `--json` to output the raw `providers` and `models` tables for programmatic processing.
 
 ```sh
-kimi provider list
-kimi provider list --json | jq '.providers | keys'
+spec-kimi provider list
+spec-kimi provider list --json | jq '.providers | keys'
 ```
 
-#### `kimi provider catalog list [providerId]`
+#### `spec-kimi provider catalog list [providerId]`
 
 Browse the public [models.dev](https://models.dev/) model catalog without modifying any configuration. Without an argument, lists all providers along with their protocol type and model count; with a `providerId`, lists all models under that provider along with their context window and capabilities.
 
@@ -371,12 +371,12 @@ Browse the public [models.dev](https://models.dev/) model catalog without modify
 | `--json` | Output matching entries as JSON |
 
 ```sh
-kimi provider catalog list
-kimi provider catalog list --filter anthropic
-kimi provider catalog list anthropic
+spec-kimi provider catalog list
+spec-kimi provider catalog list --filter anthropic
+spec-kimi provider catalog list anthropic
 ```
 
-#### `kimi provider catalog add <providerId>`
+#### `spec-kimi provider catalog add <providerId>`
 
 Import a known provider directly from the catalog by ID. The protocol type, base URL, and model information are all supplied by the catalog — only an API key is required.
 
@@ -388,8 +388,8 @@ Import a known provider directly from the catalog by ID. The protocol type, base
 | `--url <url>` | Override the catalog URL; defaults to `https://models.dev/api.json` |
 
 ```sh
-kimi provider catalog list anthropic          # Browse available models first
-kimi provider catalog add anthropic --api-key sk-ant-... --default-model claude-opus-4-7
+spec-kimi provider catalog list anthropic          # Browse available models first
+spec-kimi provider catalog add anthropic --api-key sk-ant-... --default-model claude-opus-4-7
 ```
 
 ## Next steps

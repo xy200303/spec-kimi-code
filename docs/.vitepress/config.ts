@@ -19,8 +19,8 @@ const mermaidOptimizeDeps = [
 
 const config = withMermaid(defineConfig({
   base,
-  title: 'Kimi Code CLI Docs',
-  description: 'Kimi Code CLI Documentation',
+  title: 'Spec Kimi Docs',
+  description: 'Spec-driven AI development based on Kimi Code',
 
   head: [
     ['link', { rel: 'icon', type: 'image/x-icon', href: `${base}favicon.ico` }],
@@ -34,8 +34,8 @@ const config = withMermaid(defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      title: 'Kimi Code CLI 文档',
-      description: 'Kimi Code CLI 用户文档',
+      title: 'Spec Kimi 文档',
+      description: '基于 Kimi Code 的规格驱动 AI 开发文档',
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh/guides/getting-started', activeMatch: '/zh/guides/' },
@@ -50,6 +50,7 @@ const config = withMermaid(defineConfig({
               text: '指南',
               items: [
                 { text: '开始使用', link: '/zh/guides/getting-started' },
+                { text: '规格驱动开发', link: '/zh/guides/spec-coding' },
                 { text: '从 kimi-cli 迁移', link: '/zh/guides/migration' },
                 { text: '常见使用案例', link: '/zh/guides/use-cases' },
                 { text: '交互与输入', link: '/zh/guides/interaction' },
@@ -88,8 +89,8 @@ const config = withMermaid(defineConfig({
             {
               text: '参考手册',
               items: [
-                { text: 'kimi 命令', link: '/zh/reference/kimi-command' },
-                { text: 'kimi acp 子命令', link: '/zh/reference/kimi-acp' },
+                { text: 'spec-kimi 命令', link: '/zh/reference/kimi-command' },
+                { text: 'spec-kimi acp 子命令', link: '/zh/reference/kimi-acp' },
                 { text: '内置工具', link: '/zh/reference/tools' },
                 { text: '斜杠命令', link: '/zh/reference/slash-commands' },
                 { text: '键盘快捷键', link: '/zh/reference/keyboard' },
@@ -111,8 +112,8 @@ const config = withMermaid(defineConfig({
       label: 'English',
       lang: 'en-US',
       link: '/en/',
-      title: 'Kimi Code CLI Docs',
-      description: 'Kimi Code CLI User Documentation',
+      title: 'Spec Kimi Docs',
+      description: 'Spec-driven AI development based on Kimi Code',
       themeConfig: {
         nav: [
           { text: 'Guides', link: '/en/guides/getting-started', activeMatch: '/en/guides/' },
@@ -127,6 +128,7 @@ const config = withMermaid(defineConfig({
               text: 'Guides',
               items: [
                 { text: 'Getting Started', link: '/en/guides/getting-started' },
+                { text: 'Spec-driven Development', link: '/en/guides/spec-coding' },
                 { text: 'Migrating from kimi-cli', link: '/en/guides/migration' },
                 { text: 'Common Use Cases', link: '/en/guides/use-cases' },
                 { text: 'Interaction and Input', link: '/en/guides/interaction' },
@@ -165,8 +167,8 @@ const config = withMermaid(defineConfig({
             {
               text: 'Reference',
               items: [
-                { text: 'kimi Command', link: '/en/reference/kimi-command' },
-                { text: 'kimi acp Subcommand', link: '/en/reference/kimi-acp' },
+                { text: 'spec-kimi Command', link: '/en/reference/kimi-command' },
+                { text: 'spec-kimi acp Subcommand', link: '/en/reference/kimi-acp' },
                 { text: 'Built-in Tools', link: '/en/reference/tools' },
                 { text: 'Slash Commands', link: '/en/reference/slash-commands' },
                 { text: 'Keyboard Shortcuts', link: '/en/reference/keyboard' },

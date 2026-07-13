@@ -1,13 +1,13 @@
 ---
 layout: home
 hero:
-  name: Kimi Code CLI
-  text: The Starting Point for Next-Gen Agents
+  name: Spec Kimi
+  text: Spec-driven AI development based on Kimi Code
   actions:
     - theme: brand
-      text: Get started
+      text: Start spec-driven development
       link: guides/getting-started
     - theme: alt
-      text: GitHub
-      link: https://github.com/MoonshotAI/kimi-code
+      text: Spec Coding guide
+      link: guides/spec-coding
 ---
