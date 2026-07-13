@@ -77,6 +77,7 @@ Required task categories: ${context.strategy?.requiredTaskCategories.join(', ') 
 Approval source: ${approved.approval?.source ?? 'Not recorded'}
 Approved at: ${approved.approval?.approvedAt ?? 'Not recorded'}
 Selected option: ${approved.approval?.selectedOption ?? 'Not selected'}
+Delivery finalization: ${context.finalizedAt ?? 'Not finalized'}
 ${drift}
 
 Goal:

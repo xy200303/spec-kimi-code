@@ -163,6 +163,24 @@ describe('SpecDeliveryTool', () => {
     expect(result.output).toContain('No approved spec run is available');
   });
 
+  it('reports the delivery finalization time through the approved run', async () => {
+    const { context, store, specRun } = await createRig();
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      finalizedAt: '2026-07-13T01:02:03.000Z',
+    });
+
+    const result = await executeTool(specRun, {
+      turnId: 't1',
+      toolCallId: 'call-finalized-spec-run',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: false });
+    expect(result.output).toContain('Delivery finalization: 2026-07-13T01:02:03.000Z');
+  });
+
   it('writes a structured draft when the run has tracked work', async () => {
     const { context, files, store, tool } = await createRig();
     const tasks: readonly SpecTask[] = [
@@ -426,11 +444,89 @@ describe('SpecDeliveryTool', () => {
     expect(result).toMatchObject({ isError: false });
     expect(result.output).toContain('Completed delivery records');
     expect(files.get(context.delivery)).toContain('## Status\n\nComplete');
+    expect(files.get(context.delivery)).toContain('Finalized at:');
     expect(JSON.parse(files.get(context.deliveryJson) ?? '{}')).toMatchObject({
       status: 'complete',
+      finalizedAt: expect.any(String),
     });
     expect(files.get(context.delivery)).toContain('[x] Diff review: Reviewed the final diff.');
     expect(files.get(context.delivery)).toContain('tool call call-diff; git diff --check');
+  });
+
+  it('rejects updates after finalizing a delivery record', async () => {
+    const { context, files, store, tool } = await createRig();
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-complete',
+        title: 'Complete delivery',
+        status: 'done',
+        reason: 'Close the approved work.',
+      },
+    ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm test',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-typecheck',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm typecheck',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-lint',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm lint',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-diff',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'git diff --check',
+      },
+    ]);
+    const completionArgs = {
+      complete: true,
+      evidence: [
+        { kind: 'tests' as const, detail: 'pnpm test', toolCallId: 'call-tests' },
+        {
+          kind: 'typecheck_or_build' as const,
+          detail: 'pnpm typecheck',
+          toolCallId: 'call-typecheck',
+        },
+        { kind: 'lint_or_format' as const, detail: 'pnpm lint', toolCallId: 'call-lint' },
+        { kind: 'diff_review' as const, detail: 'Final diff check', toolCallId: 'call-diff' },
+      ],
+    };
+    const completed = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-complete',
+      args: completionArgs,
+      signal,
+    });
+    const delivery = files.get(context.delivery);
+    const manifest = files.get(context.deliveryJson);
+
+    const update = await executeTool(tool, {
+      turnId: 't2',
+      toolCallId: 'call-update',
+      args: { decisions: ['Attempt to change the finalized handoff.'] },
+      signal,
+    });
+
+    expect(completed).toMatchObject({ isError: false });
+    expect(update).toMatchObject({ isError: true });
+    expect(update.output).toContain('Delivery records were finalized at');
+    expect(files.get(context.delivery)).toBe(delivery);
+    expect(files.get(context.deliveryJson)).toBe(manifest);
   });
 
   it('rejects completion when quality evidence belongs to no completed task', async () => {

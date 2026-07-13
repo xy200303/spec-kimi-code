@@ -68,6 +68,7 @@ export interface SpecDeliveryContext {
   readonly qualityGate: SpecQualityGate;
   readonly strategy?: SpecStrategyDecision;
   readonly approved?: SpecApprovedSnapshot;
+  readonly finalizedAt?: string;
 }
 
 export interface SpecEvidence {
@@ -197,6 +198,12 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
         output: 'No approved spec run is available. Complete and approve spec plan mode first.',
       };
     }
+    if (context.finalizedAt !== undefined) {
+      return {
+        isError: true,
+        output: `Delivery records were finalized at ${context.finalizedAt}. Start a new spec run to record further changes.`,
+      };
+    }
 
     const tasks = this.tasks();
     const traces = this.traces();
@@ -227,6 +234,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
 
     const documents = approved;
 
+    const finalizedAt = args.complete === true ? new Date().toISOString() : undefined;
     const content = renderDeliveryRecord({
       context,
       ...documents,
@@ -238,6 +246,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       openQuestions: args.openQuestions ?? [],
       rollbackNotes: args.rollbackNotes ?? [],
       complete: args.complete === true,
+      finalizedAt,
     });
     const manifest = renderDeliveryManifest({
       context,
@@ -250,6 +259,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       openQuestions: args.openQuestions ?? [],
       rollbackNotes: args.rollbackNotes ?? [],
       complete: args.complete === true,
+      finalizedAt,
     });
     try {
       await Promise.all([
@@ -260,8 +270,14 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       const message = error instanceof Error ? error.message : String(error);
       return { isError: true, output: `Failed to write delivery record: ${message}` };
     }
+    if (finalizedAt !== undefined) {
+      this.store.set(SPEC_DELIVERY_STORE_KEY, { ...context, finalizedAt });
+    }
     return {
-      output: `${args.complete === true ? 'Completed' : 'Updated'} delivery records: ${context.delivery}, ${context.deliveryJson}`,
+      output:
+        args.complete === true
+          ? `Completed delivery records at ${finalizedAt}: ${context.delivery}, ${context.deliveryJson}`
+          : `Updated delivery records: ${context.delivery}, ${context.deliveryJson}`,
     };
   }
 
@@ -361,6 +377,7 @@ interface DeliveryRecordInput {
   readonly openQuestions: readonly string[];
   readonly rollbackNotes: readonly string[];
   readonly complete: boolean;
+  readonly finalizedAt?: string;
 }
 
 interface DeliveryChangeRecord {
@@ -392,6 +409,8 @@ ${renderApproval(input.context.approved?.approval)}
 ## Status
 
 ${input.complete ? 'Complete' : 'Draft'}
+${input.finalizedAt === undefined ? '' : `
+Finalized at: ${input.finalizedAt}`}
 
 ## Goal
 
@@ -452,6 +471,7 @@ function renderDeliveryManifest(input: DeliveryRecordInput): string {
     {
       schemaVersion: 1,
       status: input.complete ? 'complete' : 'draft',
+      finalizedAt: input.finalizedAt,
       documents: {
         specification: input.context.spec,
         design: input.context.design,
@@ -657,6 +677,7 @@ export function isSpecDeliveryContext(value: unknown): value is SpecDeliveryCont
     typeof context['design'] === 'string' &&
     typeof context['delivery'] === 'string' &&
     typeof context['deliveryJson'] === 'string' &&
+    (context['finalizedAt'] === undefined || typeof context['finalizedAt'] === 'string') &&
     (context['approved'] === undefined || isSpecApprovedSnapshot(context['approved'])) &&
     (context['strategy'] === undefined || isSpecStrategyDecision(context['strategy'])) &&
     (context['qualityGate'] === 'fast' ||
