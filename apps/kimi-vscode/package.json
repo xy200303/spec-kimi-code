@@ -5,12 +5,18 @@
   "type": "module",
   "engines": { "vscode": "^1.95.0" },
   "main": "./dist/extension.js",
-  "activationEvents": ["onView:kimiSpecRuns", "onCommand:kimiSpec.openLatestRun"],
+  "activationEvents": ["onView:kimiSpecRuns", "onCommand:kimiSpec.openLatestRun", "onCommand:kimiSpec.refreshRuns"],
   "contributes": {
     "commands": [
-      { "command": "kimiSpec.openLatestRun", "title": "Kimi: Open Latest Spec Run" }
+      { "command": "kimiSpec.openLatestRun", "title": "Kimi: Open Latest Spec Run" },
+      { "command": "kimiSpec.refreshRuns", "title": "Kimi: Refresh Spec Runs", "icon": "$(refresh)" }
     ],
-    "views": { "explorer": [{ "id": "kimiSpecRuns", "name": "Kimi Spec Runs" }] }
+    "views": { "explorer": [{ "id": "kimiSpecRuns", "name": "Kimi Spec Runs" }] },
+    "menus": {
+      "view/title": [
+        { "command": "kimiSpec.refreshRuns", "when": "view == kimiSpecRuns", "group": "navigation" }
+      ]
+    }
   },
   "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
   "devDependencies": { "@types/vscode": "^1.95.0", "typescript": "^6.0.2" }
