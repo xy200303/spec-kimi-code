@@ -204,7 +204,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
     const incompleteTasks = tasks.filter((task) => task.status !== 'done');
     const missingEvidence = missingEvidenceKinds(context.qualityGate, evidence);
     const missingTaskCategories = missingTaskCategoriesForStrategy(context.strategy, tasks);
-    const unverifiedEvidence = unverifiedEvidenceReferences(evidence, traces);
+    const unverifiedEvidence = unverifiedEvidenceReferences(evidence, tasks, traces);
     if (
       args.complete === true &&
       (tasks.length === 0 ||
@@ -296,9 +296,17 @@ function hasUniqueEvidenceKinds(evidence: readonly SpecEvidence[]): boolean {
 
 function unverifiedEvidenceReferences(
   evidence: readonly SpecEvidence[],
+  tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
 ): readonly SpecEvidence[] {
-  return evidence.filter((item) => successfulForegroundBashTrace(item, traces) === undefined);
+  return evidence.filter((item) => {
+    const trace = successfulForegroundBashTrace(item, traces);
+    return trace === undefined || !isCompletedTaskTrace(trace, tasks);
+  });
+}
+
+function isCompletedTaskTrace(trace: SpecTaskTrace, tasks: readonly SpecTask[]): boolean {
+  return tasks.some((task) => task.id === trace.taskId && task.status === 'done');
 }
 
 function missingTaskCategoriesForStrategy(
@@ -334,7 +342,8 @@ function completionBlocker(
   }
   if (unverifiedEvidence.length > 0) {
     lines.push(
-      `Unverified evidence references: ${unverifiedEvidence.map(formatEvidenceReference).join(', ')}`,
+      `Unverified evidence references: ${unverifiedEvidence.map(formatEvidenceReference).join(', ')}. ` +
+        'Evidence must belong to completed spec tasks.',
     );
   }
   return lines.join('\n');

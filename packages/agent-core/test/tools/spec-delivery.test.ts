@@ -433,6 +433,73 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('tool call call-diff; git diff --check');
   });
 
+  it('rejects completion when quality evidence belongs to no completed task', async () => {
+    const { context, files, store, tool } = await createRig();
+    const initial = files.get(context.delivery);
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-complete',
+        title: 'Complete delivery',
+        status: 'done',
+        reason: 'Close the approved work.',
+      },
+    ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-missing',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm test',
+      },
+      {
+        taskId: 'task-missing',
+        toolCallId: 'call-typecheck',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm typecheck',
+      },
+      {
+        taskId: 'task-missing',
+        toolCallId: 'call-lint',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm lint',
+      },
+      {
+        taskId: 'task-missing',
+        toolCallId: 'call-diff',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'git diff --check',
+      },
+    ]);
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-complete',
+      args: {
+        complete: true,
+        evidence: [
+          { kind: 'tests', detail: 'pnpm test', toolCallId: 'call-tests' },
+          {
+            kind: 'typecheck_or_build',
+            detail: 'pnpm typecheck',
+            toolCallId: 'call-typecheck',
+          },
+          { kind: 'lint_or_format', detail: 'pnpm lint', toolCallId: 'call-lint' },
+          { kind: 'diff_review', detail: 'Final diff check', toolCallId: 'call-diff' },
+        ],
+      },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('must belong to completed spec tasks');
+    expect(result.output).toContain('tool call call-tests');
+    expect(files.get(context.delivery)).toBe(initial);
+  });
+
   it('rejects completion when evidence references a background Bash call', async () => {
     const { context, files, store, tool } = await createRig();
     const initial = files.get(context.delivery);
