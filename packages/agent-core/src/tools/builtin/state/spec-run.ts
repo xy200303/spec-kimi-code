@@ -11,6 +11,10 @@ import {
   SPEC_DELIVERY_STORE_KEY,
   type SpecDeliveryContext,
 } from './spec-delivery';
+import {
+  SPEC_TASK_STORE_KEY,
+  type SpecTask,
+} from './spec-task-list';
 import DESCRIPTION from './spec-run.md?raw';
 
 export const SPEC_RUN_TOOL_NAME = 'SpecRun' as const;
@@ -40,9 +44,16 @@ export class SpecRunTool implements BuiltinTool<SpecRunInput> {
             output: 'No approved spec run is available. Complete and approve spec plan mode first.',
           };
         }
-        return { output: renderSpecRun(context, await this.documentDrift(context)) };
+        return {
+          output: renderSpecRun(context, this.tasks(), await this.documentDrift(context)),
+        };
       },
     };
+  }
+
+  private tasks(): readonly SpecTask[] {
+    const value = this.store.get(SPEC_TASK_STORE_KEY);
+    return Array.isArray(value) ? value.filter(isSpecTask) : [];
   }
 
   private async documentDrift(context: SpecDeliveryContext): Promise<string> {
@@ -66,7 +77,11 @@ export class SpecRunTool implements BuiltinTool<SpecRunInput> {
   }
 }
 
-function renderSpecRun(context: SpecDeliveryContext, drift: string): string {
+function renderSpecRun(
+  context: SpecDeliveryContext,
+  tasks: readonly SpecTask[],
+  drift: string,
+): string {
   const approved = context.approved;
   if (approved === undefined) return 'No approved spec run is available.';
   const { specification, design } = approved;
@@ -92,9 +107,31 @@ ${markdownSection(specification, 'Acceptance Criteria') || 'Not recorded.'}
 Plan:
 ${markdownSection(design, 'Tasks') || 'Not recorded.'}
 
+Current tasks:
+${renderCurrentTasks(tasks)}
+
 Risks:
 ${markdownSection(design, 'Risks') || 'Not recorded.'}
 
 Verification:
 ${markdownSection(design, 'Verification') || 'Not recorded.'}`;
+}
+
+function renderCurrentTasks(tasks: readonly SpecTask[]): string {
+  if (tasks.length === 0) return 'No spec tasks recorded.';
+  return tasks.map((task) => `- [${task.status}] ${task.id}: ${task.title}`).join('\n');
+}
+
+function isSpecTask(value: unknown): value is SpecTask {
+  if (value === null || typeof value !== 'object') return false;
+  const task = value as Record<string, unknown>;
+  return (
+    typeof task['id'] === 'string' &&
+    typeof task['title'] === 'string' &&
+    typeof task['reason'] === 'string' &&
+    (task['status'] === 'pending' ||
+      task['status'] === 'in_progress' ||
+      task['status'] === 'done' ||
+      task['status'] === 'blocked')
+  );
 }

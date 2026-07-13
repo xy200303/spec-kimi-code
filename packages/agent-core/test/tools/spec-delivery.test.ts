@@ -183,6 +183,28 @@ describe('SpecDeliveryTool', () => {
     expect(result.output).toContain('Delivery finalization: 2026-07-13T01:02:03.000Z');
   });
 
+  it('reports the current structured task status through the approved run', async () => {
+    const { store, specRun } = await createRig();
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-implement',
+        title: 'Implement the delivery flow',
+        status: 'in_progress',
+        reason: 'Make the approved workflow usable.',
+      },
+    ]);
+
+    const result = await executeTool(specRun, {
+      turnId: 't1',
+      toolCallId: 'call-current-tasks',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: false });
+    expect(result.output).toContain('Current tasks:\n- [in_progress] task-implement');
+  });
+
   it('writes a structured draft when the run has tracked work', async () => {
     const { context, files, store, tool } = await createRig();
     const tasks: readonly SpecTask[] = [
