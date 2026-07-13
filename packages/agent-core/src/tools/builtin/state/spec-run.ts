@@ -1,3 +1,4 @@
+import type { Agent } from '#/agent';
 import { z } from 'zod';
 
 import type { BuiltinTool } from '../../../agent/tool';
@@ -22,7 +23,10 @@ export class SpecRunTool implements BuiltinTool<SpecRunInput> {
   readonly description: string = DESCRIPTION;
   readonly parameters: Record<string, unknown> = toInputJsonSchema(SpecRunInputSchema);
 
-  constructor(private readonly store: ToolStore) {}
+  constructor(
+    private readonly agent: Agent,
+    private readonly store: ToolStore,
+  ) {}
 
   resolveExecution(): ToolExecution {
     return {
@@ -36,13 +40,33 @@ export class SpecRunTool implements BuiltinTool<SpecRunInput> {
             output: 'No approved spec run is available. Complete and approve spec plan mode first.',
           };
         }
-        return { output: renderSpecRun(context) };
+        return { output: renderSpecRun(context, await this.documentDrift(context)) };
       },
     };
   }
+
+  private async documentDrift(context: SpecDeliveryContext): Promise<string> {
+    const approved = context.approved;
+    if (approved === undefined) return 'Spec document drift: unavailable.';
+    try {
+      const [specification, design] = await Promise.all([
+        this.agent.kaos.readText(context.spec),
+        this.agent.kaos.readText(context.design),
+      ]);
+      const changed = [
+        ...(specification === approved.specification ? [] : [context.spec]),
+        ...(design === approved.design ? [] : [context.design]),
+      ];
+      return changed.length === 0
+        ? 'Spec document drift: none.'
+        : `Spec document drift: detected in ${changed.join(', ')}. Delivery records continue to use the approved snapshot.`;
+    } catch {
+      return 'Spec document drift: unable to compare current documents.';
+    }
+  }
 }
 
-function renderSpecRun(context: SpecDeliveryContext): string {
+function renderSpecRun(context: SpecDeliveryContext, drift: string): string {
   const approved = context.approved;
   if (approved === undefined) return 'No approved spec run is available.';
   const { specification, design } = approved;
@@ -53,6 +77,7 @@ Required task categories: ${context.strategy?.requiredTaskCategories.join(', ') 
 Approval source: ${approved.approval?.source ?? 'Not recorded'}
 Approved at: ${approved.approval?.approvedAt ?? 'Not recorded'}
 Selected option: ${approved.approval?.selectedOption ?? 'Not selected'}
+${drift}
 
 Goal:
 ${markdownSection(specification, 'Goal') || 'Not recorded.'}

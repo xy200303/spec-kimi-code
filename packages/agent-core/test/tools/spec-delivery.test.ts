@@ -76,7 +76,7 @@ async function createRig() {
     files,
     store,
     tool: new SpecDeliveryTool(ctx.agent, store),
-    specRun: new SpecRunTool(store),
+    specRun: new SpecRunTool(ctx.agent, store),
   };
 }
 
@@ -114,6 +114,7 @@ describe('SpecDeliveryTool', () => {
     expect(result).toMatchObject({ isError: false });
     expect(result.output).toContain('Create a traceable delivery record.');
     expect(result.output).not.toContain('Changed after approval.');
+    expect(result.output).toContain(`Spec document drift: detected in ${context.spec}.`);
   });
 
   it('rejects the run query when approval has not been finalized', async () => {
