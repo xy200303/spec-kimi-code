@@ -318,10 +318,16 @@ function unverifiedEvidenceReferences(
   tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
 ): readonly SpecEvidence[] {
-  return evidence.filter((item) => {
-    const trace = successfulForegroundBashTrace(item, traces);
-    return trace === undefined || !isCompletedTaskTrace(trace, tasks);
-  });
+  return evidence.filter((item) => verifiedEvidenceTrace(item, tasks, traces) === undefined);
+}
+
+function verifiedEvidenceTrace(
+  evidence: SpecEvidence,
+  tasks: readonly SpecTask[],
+  traces: readonly SpecTaskTrace[],
+): SpecTaskTrace | undefined {
+  const trace = successfulForegroundBashTrace(evidence, traces);
+  return trace !== undefined && isCompletedTaskTrace(trace, tasks) ? trace : undefined;
 }
 
 function isCompletedTaskTrace(trace: SpecTaskTrace, tasks: readonly SpecTask[]): boolean {
@@ -447,7 +453,7 @@ ${renderChanges(input.tasks, input.traces)}
 
 ## Evidence
 
-${renderEvidence(input.context.qualityGate, input.evidence, input.traces)}
+${renderEvidence(input.context.qualityGate, input.evidence, input.tasks, input.traces)}
 
 ## Decisions
 
@@ -633,12 +639,13 @@ function changesForTask(
 function renderEvidence(
   qualityGate: SpecQualityGate,
   evidence: readonly SpecEvidence[],
+  tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
 ): string {
   const checklist = QUALITY_GATE_EVIDENCE[qualityGate].map((kind) => {
     const item = evidence.find((candidate) => candidate.kind === kind);
     if (item === undefined) return `- [ ] ${EVIDENCE_LABELS[kind]}`;
-    const trace = successfulForegroundBashTrace(item, traces);
+    const trace = verifiedEvidenceTrace(item, tasks, traces);
     return trace === undefined
       ? `- [ ] ${EVIDENCE_LABELS[kind]}: ${item.detail} (${formatEvidenceReference(item)})`
       : `- [x] ${EVIDENCE_LABELS[kind]}: ${item.detail} (${formatEvidenceReference(item)}; ${trace.command})`;

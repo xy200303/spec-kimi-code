@@ -280,6 +280,41 @@ describe('SpecDeliveryTool', () => {
     });
   });
 
+  it('leaves draft evidence unchecked when its command has no completed task', async () => {
+    const { context, files, store, tool } = await createRig();
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-complete',
+        title: 'Complete delivery',
+        status: 'done',
+        reason: 'Keep an unrelated completed task in the ledger.',
+      },
+    ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-missing',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm test',
+      },
+    ]);
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-draft',
+      args: {
+        evidence: [{ kind: 'tests', detail: 'pnpm test', toolCallId: 'call-tests' }],
+      },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: false });
+    expect(files.get(context.delivery)).toContain(
+      '- [ ] Relevant tests: pnpm test (tool call call-tests)',
+    );
+  });
+
   it('rejects completion when tasks or quality evidence are incomplete', async () => {
     const { context, files, store, tool } = await createRig();
     const initial = files.get(context.delivery);
