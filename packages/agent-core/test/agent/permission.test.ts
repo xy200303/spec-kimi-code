@@ -35,6 +35,95 @@ import { createFakeKaos } from '../tools/fixtures/fake-kaos';
 import { createCommandKaos, testAgent } from './harness/agent';
 
 describe('Agent permission', () => {
+  it('requests approval for a high-risk spec task even in auto mode', async () => {
+    const { manager, requestApproval, telemetryTrack } = makePermissionManager(
+      async () => ({ decision: 'approved' }),
+      { specTaskRisk: 'high' },
+    );
+    manager.mode = 'auto';
+
+    await expect(
+      manager.beforeToolCall(
+        hookContext({ id: 'call_high_risk', toolName: 'Bash', args: { command: 'pnpm deploy' } }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(telemetryTrack).toHaveBeenCalledWith(
+      'permission_policy_decision',
+      expect.objectContaining({
+        policy_name: 'spec-task-high-risk-ask',
+        spec_task_id: 'task-risk',
+        spec_task_risk: 'high',
+      }),
+    );
+  });
+
+  it('approves a low-risk spec task in manual mode after safeguards', async () => {
+    const { manager, requestApproval, telemetryTrack } = makePermissionManager(
+      async () => ({ decision: 'approved' }),
+      { specTaskRisk: 'low' },
+    );
+
+    await expect(
+      manager.beforeToolCall(
+        hookContext({ id: 'call_low_risk', toolName: 'Bash', args: { command: 'pnpm test' } }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requestApproval).not.toHaveBeenCalled();
+    expect(telemetryTrack).toHaveBeenCalledWith(
+      'permission_policy_decision',
+      expect.objectContaining({
+        policy_name: 'spec-task-low-risk-approve',
+        spec_task_id: 'task-risk',
+        spec_task_risk: 'low',
+      }),
+    );
+  });
+
+  it('keeps a low-risk spec task behind sensitive-file approval', async () => {
+    const { manager, requestApproval, telemetryTrack } = makePermissionManager(
+      async () => ({ decision: 'approved' }),
+      { specTaskRisk: 'low' },
+    );
+
+    await expect(
+      manager.beforeToolCall(
+        hookContext({
+          id: 'call_low_risk_sensitive',
+          toolName: 'Write',
+          args: { path: '.env', content: 'value' },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(telemetryTrack).toHaveBeenCalledWith(
+      'permission_policy_decision',
+      expect.objectContaining({ policy_name: 'sensitive-file-access-ask' }),
+    );
+  });
+
+  it('keeps a medium-risk spec task on the ordinary approval path', async () => {
+    const { manager, requestApproval, telemetryTrack } = makePermissionManager(
+      async () => ({ decision: 'approved' }),
+      { specTaskRisk: 'medium' },
+    );
+
+    await expect(
+      manager.beforeToolCall(
+        hookContext({ id: 'call_medium_risk', toolName: 'Bash', args: { command: 'pnpm test' } }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(telemetryTrack).toHaveBeenCalledWith(
+      'permission_policy_decision',
+      expect.objectContaining({ policy_name: 'fallback-ask' }),
+    );
+  });
+
   it('auto mode bypasses approval for ordinary builtin tools', async () => {
     const ctx = testAgent({ kaos: createCommandKaos('auto-output') });
     ctx.configure({ tools: ['Bash'] });
@@ -3879,6 +3968,7 @@ function makePermissionManager(
     readonly hooks?: Agent['hooks'];
     readonly approvalRpc?: boolean;
     readonly swarmModeActive?: boolean;
+    readonly specTaskRisk?: 'low' | 'medium' | 'high';
   } = {},
 ): {
   manager: PermissionManager;
@@ -3901,6 +3991,28 @@ function makePermissionManager(
     rpc: options.approvalRpc === false ? undefined : { requestApproval },
     hooks: options.hooks,
     telemetry: { track: telemetryTrack },
+    experimentalFlags: {
+      enabled: (flag: string) => flag === 'spec-coding',
+    },
+    tools: {
+      storeData: () => {
+        const risk = options.specTaskRisk;
+        return risk === undefined
+          ? {}
+          : {
+              specTaskActive: 'task-risk',
+              specTasks: [
+                {
+                  id: 'task-risk',
+                  title: 'Risk-controlled task',
+                  status: 'in_progress',
+                  reason: 'Exercise permission routing.',
+                  risk,
+                },
+              ],
+            };
+      },
+    },
     planMode: {
       get isActive() {
         return options.planModeActive ?? false;
