@@ -16,7 +16,7 @@ import {
 } from '@moonshot-ai/kimi-code-sdk';
 import { resolve } from 'pathe';
 
-import { CLI_SHUTDOWN_TIMEOUT_MS, PROMPT_CLEANUP_TIMEOUT_MS } from '#/constant/app';
+import { CLI_COMMAND_NAME, CLI_SHUTDOWN_TIMEOUT_MS, PROMPT_CLEANUP_TIMEOUT_MS } from '#/constant/app';
 
 import { isKimiV2Enabled } from './experimental-v2';
 import { resolveOutputFormat } from './options';
@@ -306,7 +306,7 @@ async function resolvePromptSession(
       stderr.write(
         `${chalk.hex('#E8A838')(
           `Session "${opts.session}" was created under a different directory.\n` +
-            `  cd "${target.workDir}" && kimi -r ${opts.session}`,
+            `  cd "${target.workDir}" && ${CLI_COMMAND_NAME} -r ${opts.session}`,
         )}\n\n`,
       );
       throw new Error(

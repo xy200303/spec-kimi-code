@@ -46,6 +46,7 @@ import { createKimiDefaultHeaders, createKimiDeviceId } from '@moonshot-ai/kimi-
 import { resolve } from 'pathe';
 
 import {
+  CLI_COMMAND_NAME,
   CLI_SHUTDOWN_TIMEOUT_MS,
   CLI_USER_AGENT_PRODUCT,
   PROMPT_CLEANUP_TIMEOUT_MS,
@@ -255,7 +256,7 @@ async function resolveNativeSession(
     if (target.cwd !== undefined && resolve(target.cwd) !== resolve(workDir)) {
       stderr.write(
         `Session "${opts.session}" was created under a different directory.\n` +
-          `  cd "${target.cwd}" && kimi -r ${opts.session}\n\n`,
+          `  cd "${target.cwd}" && ${CLI_COMMAND_NAME} -r ${opts.session}\n\n`,
       );
       throw new Error(`Session "${opts.session}" was created under a different directory.`);
     }

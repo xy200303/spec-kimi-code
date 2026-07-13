@@ -10,6 +10,8 @@ import { join } from 'node:path';
 
 import type { ServerLogLevel } from '@moonshot-ai/server';
 
+import { CLI_COMMAND_NAME } from '#/constant/app';
+
 export const LOCAL_SERVER_HOST = '127.0.0.1';
 export const DEFAULT_LAN_HOST = '0.0.0.0';
 export const DEFAULT_SERVER_HOST = LOCAL_SERVER_HOST;
@@ -232,7 +234,7 @@ export async function ensureServerWebReady(origin: string): Promise<void> {
   } catch (error) {
     const reason = error instanceof Error ? ` (${error.message})` : '';
     throw new Error(
-      `Server at ${origin} does not serve the Kimi web UI${reason}. Stop the existing server and rerun \`kimi server run\`.`,
+      `Server at ${origin} does not serve the Kimi web UI${reason}. Stop the existing server and rerun \`${CLI_COMMAND_NAME} server run\`.`,
       { cause: error },
     );
   } finally {

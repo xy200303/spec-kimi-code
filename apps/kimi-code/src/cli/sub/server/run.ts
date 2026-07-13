@@ -19,7 +19,7 @@ import chalk from 'chalk';
 import { Option, type Command } from 'commander';
 
 import { isKimiV2Enabled } from '#/cli/experimental-v2';
-import { CLI_SHUTDOWN_TIMEOUT_MS } from '#/constant/app';
+import { CLI_COMMAND_NAME, CLI_SHUTDOWN_TIMEOUT_MS } from '#/constant/app';
 import { getNativeWebAssetsDir } from '#/native/web-assets';
 import { darkColors } from '#/tui/theme/colors';
 import { openUrl as defaultOpenUrl } from '#/utils/open-url';
@@ -278,7 +278,7 @@ function formatReuseNotice(origin: string): string {
   return (
     `${chalk.hex(darkColors.warning)('A server is already running')} at ${origin} — ` +
     `the options from this command were not applied. ` +
-    `Run ${chalk.bold('kimi server kill')} first to bind a new host/port.\n`
+    `Run ${chalk.bold(`${CLI_COMMAND_NAME} server kill`)} first to bind a new host/port.\n`
   );
 }
 
@@ -304,7 +304,7 @@ function formatDangerNoticeLines(): string[] {
   return [
     `  ${dangerBold('⚠ DANGER: authentication is DISABLED (--dangerous-bypass-auth).')}`,
     `  ${danger('Anyone who can reach this port gets full access. Only continue if you understand the risk.')}`,
-    `  ${danger(`If you are unsure, run `)}${dangerBold('kimi server kill')}${danger(' now to stop this process.')}`,
+    `  ${danger(`If you are unsure, run `)}${dangerBold(`${CLI_COMMAND_NAME} server kill`)}${danger(' now to stop this process.')}`,
   ];
 }
 
@@ -618,7 +618,7 @@ function formatReadyBanner(
 
   // Auxiliary controls last.
   lines.push(`  ${label('Logs:     ')}${muted('off')}${dim('  use --log-level info to enable')}`);
-  lines.push(`  ${label('Stop:     ')}${muted('kimi server kill')}`);
+  lines.push(`  ${label('Stop:     ')}${muted(`${CLI_COMMAND_NAME} server kill`)}`);
   lines.push('');
   return lines.join('\n');
 }

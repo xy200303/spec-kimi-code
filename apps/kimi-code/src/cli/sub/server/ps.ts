@@ -11,6 +11,7 @@ import type { Command } from 'commander';
 
 import { getLiveLock } from '@moonshot-ai/server';
 
+import { CLI_COMMAND_NAME } from '#/constant/app';
 import { getDataDir } from '#/utils/paths';
 
 import { lockConnectHost } from './daemon';
@@ -55,7 +56,7 @@ async function handlePsCommand(opts: { json?: boolean }): Promise<void> {
   const lock = getLiveLock();
   if (!lock) {
     throw new Error(
-      'No running Kimi server. Start one with `kimi server run` or `kimi web`.',
+      `No running Kimi server. Start one with \`${CLI_COMMAND_NAME} server run\` or \`${CLI_COMMAND_NAME} web\`.`,
     );
   }
 
