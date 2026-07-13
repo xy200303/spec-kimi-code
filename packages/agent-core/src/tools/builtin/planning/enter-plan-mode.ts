@@ -52,6 +52,7 @@ export class EnterPlanModeTool implements BuiltinTool<EnterPlanModeInput> {
             this.agent.planMode.planFilePath,
             this.agent.planMode.specDocuments?.spec,
             this.agent.planMode.specDocuments?.delivery,
+            this.agent.planMode.qualityGate,
           ),
         };
       },
@@ -63,6 +64,7 @@ function enteredPlanModeMessage(
   planPath: string | null,
   specPath: string | undefined,
   deliveryPath: string | undefined,
+  qualityGate: string | null,
 ): string {
   if (planPath === null) {
     return [
@@ -83,6 +85,7 @@ function enteredPlanModeMessage(
     `Design file: ${planPath}`,
     ...(specPath === undefined ? [] : [`Specification file: ${specPath}`]),
     ...(deliveryPath === undefined ? [] : [`Delivery record: ${deliveryPath}`]),
+    ...(qualityGate === null ? [] : [`Quality gate: ${qualityGate}`]),
     '',
     '1. Use read-only tools (Read, Grep, Glob) to investigate the codebase. Use Bash only when needed.',
     '2. Design a concrete, step-by-step plan.',

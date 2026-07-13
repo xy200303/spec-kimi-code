@@ -129,6 +129,7 @@ Switches that control the behavior of subsystems such as telemetry, background t
 | `KIMI_SUBAGENT_TIMEOUT_MS` | Maximum wall-clock time (ms) a single subagent (`Agent` / `AgentSwarm`) may run; takes higher priority than `[subagent] timeout_ms` in `config.toml` (default `7200000`, i.e. 2 hours) | Positive integer; invalid values fall back to the config or default |
 | `KIMI_CODE_EXPERIMENTAL_FLAG` | Enable all registered experimental features for this process | `1`, `true`, `yes`, `on` |
 | `KIMI_CODE_EXPERIMENTAL_SPEC_CODING` | Enable project-local specification and design documents in Plan mode | `1`, `true`, `yes`, `on` |
+| `KIMI_CODE_SPEC_QUALITY_GATE` | Select the evidence checklist for a spec coding delivery record | `fast`, `standard` (default), `strict`, `release` |
 | `KIMI_SHELL_PATH` | Override the Git Bash path on Windows (used when auto-detection fails) | Absolute path |
 | `KIMI_MODEL_MAX_COMPLETION_TOKENS` | Hard cap on `max_completion_tokens` per LLM step; applies to the `kimi` provider only | Positive integer; `0` or negative disables clamping |
 | `KIMI_MODEL_TEMPERATURE` | Sampling temperature for every request; applies to the `kimi` provider only (global — independent of `KIMI_MODEL_NAME`) | Number, e.g. `0.3` |

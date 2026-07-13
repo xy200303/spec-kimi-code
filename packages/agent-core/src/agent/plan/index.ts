@@ -42,6 +42,11 @@ export interface DesignData {
   readonly missingSections: readonly RequiredDesignSection[];
 }
 
+export const SPEC_QUALITY_GATE_ENV = 'KIMI_CODE_SPEC_QUALITY_GATE';
+export const SPEC_QUALITY_GATES = ['fast', 'standard', 'strict', 'release'] as const;
+export type SpecQualityGate = (typeof SPEC_QUALITY_GATES)[number];
+const DEFAULT_SPEC_QUALITY_GATE: SpecQualityGate = 'standard';
+
 const SPEC_TEMPLATE = `# Specification
 
 ## Goal
@@ -60,7 +65,12 @@ const DESIGN_TEMPLATE = `# Design
 ## Verification
 `;
 
-const DELIVERY_TEMPLATE = `# Delivery Record
+function deliveryTemplate(qualityGate: SpecQualityGate): string {
+  return `# Delivery Record
+
+## Quality Gate
+
+${qualityGate}
 
 ## Goal
 
@@ -74,6 +84,8 @@ const DELIVERY_TEMPLATE = `# Delivery Record
 
 ## Evidence
 
+${qualityGateEvidenceChecklist(qualityGate)}
+
 ## Decisions
 
 ## Risks
@@ -82,12 +94,14 @@ const DELIVERY_TEMPLATE = `# Delivery Record
 
 ## Rollback Notes
 `;
+}
 
 export class PlanMode {
   protected _isActive = false;
   protected _planId: null | string = null;
   protected _planFilePath: PlanFilePath = null;
   protected _specDocuments: SpecDocumentPaths | null = null;
+  protected _qualityGate: SpecQualityGate | null = null;
 
   constructor(protected readonly agent: Agent) {}
 
@@ -104,6 +118,7 @@ export class PlanMode {
     this._planId = id;
     this._specDocuments = this.specDocumentsFor(id);
     this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
+    this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
 
     let enterRecorded = false;
     try {
@@ -115,7 +130,10 @@ export class PlanMode {
       if (this._specDocuments !== null) {
         await this.writeSpecTemplate(this._specDocuments.spec);
         await this.writeDesignTemplate(planFilePath);
-        await this.writeDeliveryTemplate(this._specDocuments.delivery);
+        await this.writeDeliveryTemplate(
+          this._specDocuments.delivery,
+          this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
+        );
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
@@ -127,6 +145,7 @@ export class PlanMode {
         this._planId = null;
         this._planFilePath = null;
         this._specDocuments = null;
+        this._qualityGate = null;
       }
       throw error;
     }
@@ -144,6 +163,7 @@ export class PlanMode {
     this._planId = id;
     this._specDocuments = this.specDocumentsFor(id);
     this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
+    this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
   }
 
   cancel(id?: string): void {
@@ -156,6 +176,7 @@ export class PlanMode {
     this._planId = null;
     this._planFilePath = null;
     this._specDocuments = null;
+    this._qualityGate = null;
     this.agent.emitStatusUpdated();
   }
 
@@ -174,6 +195,7 @@ export class PlanMode {
     this._planId = null;
     this._planFilePath = null;
     this._specDocuments = null;
+    this._qualityGate = null;
     this.agent.emitStatusUpdated();
   }
 
@@ -187,6 +209,10 @@ export class PlanMode {
 
   get specDocuments(): SpecDocumentPaths | null {
     return this._specDocuments;
+  }
+
+  get qualityGate(): SpecQualityGate | null {
+    return this._qualityGate;
   }
 
   get writableFilePaths(): readonly string[] {
@@ -252,8 +278,8 @@ export class PlanMode {
     await this.agent.kaos.writeText(path, DESIGN_TEMPLATE);
   }
 
-  private async writeDeliveryTemplate(path: string): Promise<void> {
-    await this.agent.kaos.writeText(path, DELIVERY_TEMPLATE);
+  private async writeDeliveryTemplate(path: string, qualityGate: SpecQualityGate): Promise<void> {
+    await this.agent.kaos.writeText(path, deliveryTemplate(qualityGate));
   }
 
   private async ensurePlanDirectory(path: string): Promise<void> {
@@ -291,6 +317,26 @@ export function missingSpecificationSections(
 
 export function missingDesignSections(content: string): readonly RequiredDesignSection[] {
   return missingMarkdownSections(content, REQUIRED_DESIGN_SECTIONS);
+}
+
+export function resolveSpecQualityGate(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): SpecQualityGate {
+  const value = env[SPEC_QUALITY_GATE_ENV]?.trim().toLowerCase();
+  return SPEC_QUALITY_GATES.find((qualityGate) => qualityGate === value) ?? DEFAULT_SPEC_QUALITY_GATE;
+}
+
+function qualityGateEvidenceChecklist(qualityGate: SpecQualityGate): string {
+  switch (qualityGate) {
+    case 'fast':
+      return '- [ ] Relevant validation\n- [ ] Diff review';
+    case 'standard':
+      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review';
+    case 'strict':
+      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review\n- [ ] Critical-path verification\n- [ ] Edge-case verification';
+    case 'release':
+      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review\n- [ ] Critical-path verification\n- [ ] Edge-case verification\n- [ ] Release build or package verification\n- [ ] Release-note review';
+  }
 }
 
 function missingMarkdownSections<T extends string>(

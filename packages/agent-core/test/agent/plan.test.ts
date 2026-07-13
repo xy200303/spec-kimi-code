@@ -2,6 +2,7 @@ import type { ToolCall } from '@moonshot-ai/kosong';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FlagResolver } from '../../src/flags';
+import { resolveSpecQualityGate } from '../../src/agent/plan';
 import { createFakeKaos } from '../tools/fixtures/fake-kaos';
 import { createCommandKaos, testAgent } from './harness/agent';
 
@@ -87,6 +88,7 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/spec.md',
       '/workspace/specs/project-documents/design.md',
     ]);
+    expect(ctx.agent.planMode.qualityGate).toBe('standard');
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/spec.md',
       expect.stringContaining('# Specification'),
@@ -97,7 +99,7 @@ describe('manual plan entry', () => {
     );
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/delivery.md',
-      expect.stringContaining('# Delivery Record'),
+      expect.stringContaining('## Quality Gate\n\nstandard'),
     );
   });
 
@@ -126,6 +128,23 @@ describe('manual plan entry', () => {
     expect(ctx.llmCalls).toHaveLength(2);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Plan mode is now active');
     await ctx.expectResumeMatches();
+  });
+});
+
+describe('spec quality gates', () => {
+  it.each(['fast', 'standard', 'strict', 'release'] as const)(
+    'accepts the %s quality gate',
+    (qualityGate) => {
+      expect(resolveSpecQualityGate({ KIMI_CODE_SPEC_QUALITY_GATE: qualityGate })).toBe(
+        qualityGate,
+      );
+    },
+  );
+
+  it('falls back to the standard quality gate for an invalid value', () => {
+    expect(resolveSpecQualityGate({ KIMI_CODE_SPEC_QUALITY_GATE: 'unsupported' })).toBe(
+      'standard',
+    );
   });
 });
 
@@ -292,6 +311,7 @@ describe('spec coding approval', () => {
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('update the delivery record');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('standard quality gate');
   });
 
   it('keeps the delivery record path after manual plan approval', async () => {

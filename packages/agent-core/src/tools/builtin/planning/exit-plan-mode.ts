@@ -135,6 +135,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     });
 
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
+    const qualityGate = this.agent.planMode.qualityGate;
     const failed = this.exitPlanMode();
     if (failed !== undefined) return failed;
 
@@ -146,6 +147,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
         resolvedPlan.plan,
         resolvedPlan.path,
         deliveryPath,
+        qualityGate,
       )}`,
     };
   }
@@ -275,11 +277,12 @@ function formatPlanForOutput(
   plan: string,
   path: string | undefined,
   deliveryPath: string | undefined,
+  qualityGate: string | null,
 ): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
   const delivery =
     deliveryPath === undefined
       ? ''
-      : `\n\nAfter implementation and verification, update the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
+      : `\n\nAfter implementation and verification, satisfy the ${qualityGate ?? 'standard'} quality gate and update the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
   return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
 }
