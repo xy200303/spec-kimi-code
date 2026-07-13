@@ -65,6 +65,19 @@ describe('SpecTaskListTool', () => {
     expect(
       SpecTaskListInputSchema.safeParse({
         tasks: [
+          {
+            id: 'task-reproduce',
+            title: 'Reproduce the issue',
+            status: 'pending',
+            reason: 'Required by the selected strategy.',
+            category: 'reproduction',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      SpecTaskListInputSchema.safeParse({
+        tasks: [
           { id: 'task-one', title: 'One', status: 'pending', reason: 'Needed.' },
           { id: 'task-one', title: 'Two', status: 'pending', reason: 'Needed.' },
         ],

@@ -13,12 +13,29 @@ export const SPEC_TASK_TRACE_STORE_KEY = 'specTaskTraces' as const;
 
 export type SpecTaskStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
 export type SpecTaskRisk = 'low' | 'medium' | 'high';
+export const SPEC_TASK_CATEGORIES = [
+  'scope_validation',
+  'impact_analysis',
+  'behavioral_verification',
+  'reproduction',
+  'root_cause',
+  'regression_test',
+  'behavior_preservation',
+  'review_findings',
+  'diff_review',
+  'release_build',
+  'release_notes',
+  'research_summary',
+  'planning_review',
+] as const;
+export type SpecTaskCategory = (typeof SPEC_TASK_CATEGORIES)[number];
 
 export interface SpecTask {
   readonly id: string;
   readonly title: string;
   readonly status: SpecTaskStatus;
   readonly reason: string;
+  readonly category?: SpecTaskCategory;
   readonly risk?: SpecTaskRisk;
   readonly affectedPaths?: readonly string[];
   readonly changedPaths?: readonly string[];
@@ -52,6 +69,10 @@ const SpecTaskSchema = z.object({
   title: z.string().min(1).describe('Short, actionable task title.'),
   status: z.enum(['pending', 'in_progress', 'done', 'blocked']),
   reason: z.string().min(1).describe('Why this task is necessary for the approved goal.'),
+  category: z
+    .enum(SPEC_TASK_CATEGORIES)
+    .optional()
+    .describe('Strategy requirement this task covers, when the approved run requires one.'),
   risk: z.enum(['low', 'medium', 'high']).optional(),
   affectedPaths: z
     .array(z.string().min(1))
@@ -173,6 +194,7 @@ function renderSpecTask(task: SpecTask, traces: readonly SpecTaskTrace[]): strin
     `  Why: ${task.reason}`,
   ];
   if (task.risk !== undefined) lines.push(`  Risk: ${task.risk}`);
+  if (task.category !== undefined) lines.push(`  Category: ${task.category}`);
   if (task.affectedPaths !== undefined && task.affectedPaths.length > 0) {
     lines.push(`  Planned files: ${task.affectedPaths.join(', ')}`);
   }
@@ -199,6 +221,7 @@ function copyTask(task: SpecTask): SpecTask {
     title: task.title,
     status: task.status,
     reason: task.reason,
+    category: task.category,
     risk: task.risk,
     affectedPaths: task.affectedPaths?.map((path) => path),
     changedPaths: task.changedPaths?.map((path) => path),

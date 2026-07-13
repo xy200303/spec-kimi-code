@@ -201,6 +201,7 @@ describe('spec development strategy router', () => {
     expect(routeSpecDevelopmentStrategy('Add a structured delivery record.', '')).toMatchObject({
       strategy: 'controlled_feature',
       recommendedQualityGate: 'standard',
+      requiredTaskCategories: ['impact_analysis', 'behavioral_verification'],
     });
   });
 });

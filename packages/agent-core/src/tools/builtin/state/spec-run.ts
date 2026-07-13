@@ -49,6 +49,7 @@ function renderSpecRun(context: SpecDeliveryContext): string {
   return `Approved spec run
 Quality gate: ${context.qualityGate}
 Strategy: ${context.strategy?.strategy ?? 'Not routed'}
+Required task categories: ${context.strategy?.requiredTaskCategories.join(', ') ?? 'Not recorded'}
 Approval source: ${approved.approval?.source ?? 'Not recorded'}
 Approved at: ${approved.approval?.approvedAt ?? 'Not recorded'}
 Selected option: ${approved.approval?.selectedOption ?? 'Not selected'}

@@ -179,6 +179,7 @@ describe('SpecDeliveryTool', () => {
       strategy: {
         strategy: 'bug_diagnosis',
         recommendedQualityGate: 'strict',
+        requiredTaskCategories: ['reproduction', 'root_cause', 'regression_test'],
         reasons: ['Matched "regression" in the approved specification or design.'],
       },
     });
@@ -230,7 +231,6 @@ describe('SpecDeliveryTool', () => {
         reason: 'Ensure the output is ready.',
       },
     ]);
-
     const result = await executeTool(tool, {
       turnId: 't1',
       toolCallId: 'call-complete',
@@ -246,6 +246,76 @@ describe('SpecDeliveryTool', () => {
     expect(result.output).toContain('Typecheck or build');
     expect(result.output).toContain('Unverified evidence references: tool call call-test');
     expect(files.get(context.delivery)).toBe(initial);
+  });
+
+  it('rejects completion when required strategy task categories are missing', async () => {
+    const { context, store, tool } = await createRig();
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      strategy: {
+        strategy: 'bug_diagnosis',
+        recommendedQualityGate: 'strict',
+        requiredTaskCategories: ['reproduction', 'root_cause', 'regression_test'],
+        reasons: ['Matched "regression" in the approved specification or design.'],
+      },
+    });
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-reproduce',
+        title: 'Reproduce the issue',
+        status: 'done',
+        reason: 'Establish the failure before fixing it.',
+        category: 'reproduction',
+      },
+    ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-reproduce',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm test',
+      },
+      {
+        taskId: 'task-reproduce',
+        toolCallId: 'call-typecheck',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm typecheck',
+      },
+      {
+        taskId: 'task-reproduce',
+        toolCallId: 'call-lint',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm lint',
+      },
+      {
+        taskId: 'task-reproduce',
+        toolCallId: 'call-diff',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'git diff --check',
+      },
+    ]);
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-strategy-complete',
+      args: {
+        complete: true,
+        evidence: [
+          { kind: 'tests', detail: 'pnpm test', toolCallId: 'call-tests' },
+          { kind: 'typecheck_or_build', detail: 'pnpm typecheck', toolCallId: 'call-typecheck' },
+          { kind: 'lint_or_format', detail: 'pnpm lint', toolCallId: 'call-lint' },
+          { kind: 'diff_review', detail: 'git diff --check', toolCallId: 'call-diff' },
+        ],
+      },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('Missing strategy task categories: root_cause, regression_test');
   });
 
   it('marks the record complete when the standard quality gate passes', async () => {

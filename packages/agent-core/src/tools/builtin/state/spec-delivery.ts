@@ -9,6 +9,7 @@ import type { ToolStore } from '../../store';
 import {
   SPEC_TASK_STORE_KEY,
   SPEC_TASK_TRACE_STORE_KEY,
+  type SpecTaskCategory,
   type SpecTask,
   type SpecTaskTrace,
 } from './spec-task-list';
@@ -31,6 +32,7 @@ export type SpecDevelopmentStrategy =
 export interface SpecStrategyDecision {
   readonly strategy: SpecDevelopmentStrategy;
   readonly recommendedQualityGate: SpecQualityGate;
+  readonly requiredTaskCategories: readonly SpecTaskCategory[];
   readonly reasons: readonly string[];
 }
 
@@ -197,17 +199,25 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
     const evidence = args.evidence ?? [];
     const incompleteTasks = tasks.filter((task) => task.status !== 'done');
     const missingEvidence = missingEvidenceKinds(context.qualityGate, evidence);
+    const missingTaskCategories = missingTaskCategoriesForStrategy(context.strategy, tasks);
     const unverifiedEvidence = unverifiedEvidenceReferences(evidence, traces);
     if (
       args.complete === true &&
       (tasks.length === 0 ||
         incompleteTasks.length > 0 ||
         missingEvidence.length > 0 ||
+        missingTaskCategories.length > 0 ||
         unverifiedEvidence.length > 0)
     ) {
       return {
         isError: true,
-        output: completionBlocker(tasks, incompleteTasks, missingEvidence, unverifiedEvidence),
+        output: completionBlocker(
+          tasks,
+          incompleteTasks,
+          missingEvidence,
+          missingTaskCategories,
+          unverifiedEvidence,
+        ),
       };
     }
 
@@ -272,10 +282,22 @@ function unverifiedEvidenceReferences(
   return evidence.filter((item) => successfulForegroundBashTrace(item, traces) === undefined);
 }
 
+function missingTaskCategoriesForStrategy(
+  strategy: SpecStrategyDecision | undefined,
+  tasks: readonly SpecTask[],
+): readonly SpecTaskCategory[] {
+  if (strategy === undefined) return [];
+  const completedCategories = new Set(
+    tasks.filter((task) => task.status === 'done').map((task) => task.category),
+  );
+  return strategy.requiredTaskCategories.filter((category) => !completedCategories.has(category));
+}
+
 function completionBlocker(
   tasks: readonly SpecTask[],
   incompleteTasks: readonly SpecTask[],
   missingEvidence: readonly SpecEvidenceKind[],
+  missingTaskCategories: readonly SpecTaskCategory[],
   unverifiedEvidence: readonly SpecEvidence[],
 ): string {
   const lines = ['Delivery cannot be marked complete.'];
@@ -287,6 +309,9 @@ function completionBlocker(
     lines.push(
       `Missing quality-gate evidence: ${missingEvidence.map((kind) => EVIDENCE_LABELS[kind]).join(', ')}`,
     );
+  }
+  if (missingTaskCategories.length > 0) {
+    lines.push(`Missing strategy task categories: ${missingTaskCategories.join(', ')}`);
   }
   if (unverifiedEvidence.length > 0) {
     lines.push(
@@ -400,6 +425,7 @@ function renderTasks(tasks: readonly SpecTask[]): string {
       const details = [
         `- [${task.status}] ${task.id}: ${task.title}`,
         `  Reason: ${task.reason}`,
+        ...(task.category === undefined ? [] : [`  Category: ${task.category}`]),
         ...(task.risk === undefined ? [] : [`  Risk: ${task.risk}`]),
         ...(task.affectedPaths === undefined || task.affectedPaths.length === 0
           ? []
@@ -418,6 +444,7 @@ function renderStrategy(strategy: SpecStrategyDecision | undefined): string {
   return [
     `Selected: ${strategy.strategy}`,
     `Recommended quality gate: ${strategy.recommendedQualityGate}`,
+    `Required task categories: ${strategy.requiredTaskCategories.join(', ') || 'None'}`,
     'Reasons:',
     ...strategy.reasons.map((reason) => `- ${reason}`),
   ].join('\n');
@@ -538,8 +565,28 @@ function isSpecStrategyDecision(value: unknown): value is SpecStrategyDecision {
       strategy['recommendedQualityGate'] === 'standard' ||
       strategy['recommendedQualityGate'] === 'strict' ||
       strategy['recommendedQualityGate'] === 'release') &&
+    Array.isArray(strategy['requiredTaskCategories']) &&
+    strategy['requiredTaskCategories'].every(isSpecTaskCategory) &&
     Array.isArray(strategy['reasons']) &&
     strategy['reasons'].every((reason) => typeof reason === 'string')
+  );
+}
+
+function isSpecTaskCategory(value: unknown): value is SpecTaskCategory {
+  return (
+    value === 'scope_validation' ||
+    value === 'impact_analysis' ||
+    value === 'behavioral_verification' ||
+    value === 'reproduction' ||
+    value === 'root_cause' ||
+    value === 'regression_test' ||
+    value === 'behavior_preservation' ||
+    value === 'review_findings' ||
+    value === 'diff_review' ||
+    value === 'release_build' ||
+    value === 'release_notes' ||
+    value === 'research_summary' ||
+    value === 'planning_review'
   );
 }
 
@@ -550,6 +597,7 @@ function isSpecTask(value: unknown): value is SpecTask {
     typeof task['id'] === 'string' &&
     typeof task['title'] === 'string' &&
     typeof task['reason'] === 'string' &&
+    (task['category'] === undefined || isSpecTaskCategory(task['category'])) &&
     (task['status'] === 'pending' ||
       task['status'] === 'in_progress' ||
       task['status'] === 'done' ||
