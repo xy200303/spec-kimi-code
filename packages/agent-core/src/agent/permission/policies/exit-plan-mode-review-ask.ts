@@ -72,7 +72,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
     const delivery =
       deliveryPath === undefined
         ? ''
-        : `\n\nAfter implementation and verification, satisfy the ${qualityGate ?? 'standard'} quality gate and update the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
+        : `\n\nAfter implementation and verification, use SpecDelivery to satisfy the ${qualityGate ?? 'standard'} quality gate and write the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
     const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}${delivery}`;
     return {
       kind: 'result' as const,

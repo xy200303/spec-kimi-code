@@ -2,6 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'pathe';
 
 import type { Agent } from '..';
+import {
+  SPEC_DELIVERY_STORE_KEY,
+  type SpecDeliveryContext,
+} from '../../tools/builtin/state/spec-delivery';
+import {
+  SPEC_TASK_ACTIVE_STORE_KEY,
+  SPEC_TASK_STORE_KEY,
+  SPEC_TASK_TRACE_STORE_KEY,
+} from '../../tools/builtin/state/spec-task-list';
 import { generateHeroSlug } from '../../utils/hero-slug';
 
 export type PlanData = null | {
@@ -134,6 +143,13 @@ export class PlanMode {
           this._specDocuments.delivery,
           this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
         );
+        this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
+        this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
+        this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
+        this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
+          ...this._specDocuments,
+          qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
+        } satisfies SpecDeliveryContext);
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
@@ -167,6 +183,7 @@ export class PlanMode {
   }
 
   cancel(id?: string): void {
+    const hadSpecDocuments = this._specDocuments !== null;
     this.agent.records.logRecord({ type: 'plan_mode.cancel', id });
     this.agent.replayBuilder.push({
       type: 'plan_updated',
@@ -177,6 +194,12 @@ export class PlanMode {
     this._planFilePath = null;
     this._specDocuments = null;
     this._qualityGate = null;
+    if (hadSpecDocuments) {
+      this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
+      this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
+      this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
+      this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, null);
+    }
     this.agent.emitStatusUpdated();
   }
 

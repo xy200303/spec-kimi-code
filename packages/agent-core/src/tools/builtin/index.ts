@@ -23,6 +23,7 @@ export * from './planning/exit-plan-mode';
 export * from './select-tools';
 export * from './shell/bash';
 export * from './state/todo-list';
+export * from './state/spec-delivery';
 export * from './state/spec-task-list';
 export * from './web/fetch-url';
 export * from './web/web-search';

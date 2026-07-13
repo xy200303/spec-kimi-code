@@ -20,6 +20,8 @@ tools:
   - CronDelete
   - ReadMediaFile
   - TodoList
+  - SpecTaskList
+  - SpecDelivery
   - Skill
   - WebSearch
   - Agent

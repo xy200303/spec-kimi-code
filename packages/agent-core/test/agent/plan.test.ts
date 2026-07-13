@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { FlagResolver } from '../../src/flags';
 import { resolveSpecQualityGate } from '../../src/agent/plan';
+import {
+  SPEC_TASK_ACTIVE_STORE_KEY,
+  SPEC_TASK_STORE_KEY,
+  SPEC_TASK_TRACE_STORE_KEY,
+} from '../../src/tools/builtin/state/spec-task-list';
 import { createFakeKaos } from '../tools/fixtures/fake-kaos';
 import { createCommandKaos, testAgent } from './harness/agent';
 
@@ -74,6 +79,23 @@ describe('manual plan entry', () => {
       experimentalFlags: flags,
       kaos: createPlanKaos({ writeText }),
     });
+    ctx.agent.tools.updateStore(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-previous-run',
+        title: 'Previous run task',
+        status: 'done',
+        reason: 'Verify state reset.',
+      },
+    ]);
+    ctx.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, 'task-previous-run');
+    ctx.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-previous-run',
+        toolCallId: 'call-previous-run',
+        toolName: 'Write',
+        outcome: 'succeeded',
+      },
+    ]);
 
     await ctx.agent.planMode.enter('project-documents');
 
@@ -89,6 +111,9 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/design.md',
     ]);
     expect(ctx.agent.planMode.qualityGate).toBe('standard');
+    expect(ctx.agent.tools.storeData()[SPEC_TASK_STORE_KEY]).toEqual([]);
+    expect(ctx.agent.tools.storeData()[SPEC_TASK_ACTIVE_STORE_KEY]).toBeNull();
+    expect(ctx.agent.tools.storeData()[SPEC_TASK_TRACE_STORE_KEY]).toEqual([]);
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/spec.md',
       expect.stringContaining('# Specification'),
@@ -101,8 +126,9 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/delivery.md',
       expect.stringContaining('## Quality Gate\n\nstandard'),
     );
-    ctx.configure({ tools: ['SpecTaskList'] });
+    ctx.configure({ tools: ['SpecTaskList', 'SpecDelivery'] });
     expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecTaskList')).toBe(true);
+    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecDelivery')).toBe(true);
   });
 
   it('enters plan mode through the EnterPlanMode tool and reminds the next step', async () => {
@@ -312,7 +338,7 @@ describe('spec coding approval', () => {
     await ctx.untilTurnEnd();
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('update the delivery record');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('standard quality gate');
   });
 
@@ -361,7 +387,7 @@ describe('spec coding approval', () => {
 
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('update the delivery record');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
   });
 });
 

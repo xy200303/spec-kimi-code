@@ -83,6 +83,8 @@ When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, Plan mode instead create
 
 When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, **`SpecTaskList`** keeps the structured task trace for the current spec run. Each task has a stable `id`, a reason, risk level, planned and changed file paths, and verification evidence. Omitting `tasks` queries the list; providing `tasks` replaces it with the current task trace. Set `activeTaskId` before `Write`, `Edit`, `Bash`, `Agent`, or `AgentSwarm` calls to record those outcomes against the selected task; pass `null` to clear the selection.
 
+**`SpecDelivery`** writes the project-local `delivery.md` from the approved specification and design, structured tasks, and traced tool outcomes. Supply quality-gate evidence plus any decisions, risks, open questions, and rollback notes. Set `complete` to `true` only after every task is done and all evidence categories required by the selected quality gate are present; otherwise the tool leaves the record unchanged and explains what is missing.
+
 ## Collaboration Tools
 
 Collaboration tools handle inter-Agent coordination, user interaction, and Skill invocation.
