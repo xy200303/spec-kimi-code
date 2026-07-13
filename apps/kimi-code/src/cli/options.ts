@@ -3,6 +3,7 @@ export type PromptOutputFormat = 'text' | 'stream-json';
 
 /** Environment variable that sets the default `-p` output format (flag wins). */
 export const OUTPUT_FORMAT_ENV = 'KIMI_MODEL_OUTPUT_FORMAT';
+export const SPEC_CODING_ENV = 'KIMI_CODE_EXPERIMENTAL_SPEC_CODING';
 
 const OUTPUT_FORMATS = ['text', 'stream-json'] as const;
 
@@ -50,6 +51,19 @@ export interface CLIOptions {
 export interface ValidatedOptions {
   options: CLIOptions;
   uiMode: UIMode;
+}
+
+/**
+ * spec-kimi is a spec-first CLI: interactive work always starts in Plan mode.
+ * Print mode stays non-interactive because it cannot present a plan for review.
+ */
+export function prepareSpecCodingOptions(
+  opts: CLIOptions,
+  env: NodeJS.ProcessEnv = process.env,
+): CLIOptions {
+  env[SPEC_CODING_ENV] = '1';
+  if (opts.prompt !== undefined) return opts;
+  return opts.plan ? opts : { ...opts, plan: true };
 }
 
 export class OptionConflictError extends Error {

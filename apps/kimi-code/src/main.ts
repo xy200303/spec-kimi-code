@@ -25,7 +25,7 @@ import {
 import { createProgram } from './cli/commands';
 import { finalizeHeadlessRun } from './cli/headless-exit';
 import type { CLIOptions } from './cli/options';
-import { OptionConflictError, validateOptions } from './cli/options';
+import { OptionConflictError, prepareSpecCodingOptions, validateOptions } from './cli/options';
 import { runPrompt } from './cli/run-prompt';
 import { runShell } from './cli/run-shell';
 import { formatStartupError } from './cli/startup-error';
@@ -55,9 +55,10 @@ export async function handleMainCommand(
   opts: CLIOptions,
   version: string,
 ): Promise<MainCommandOutcome> {
+  const specOptions = prepareSpecCodingOptions(opts);
   let validated: ReturnType<typeof validateOptions>;
   try {
-    validated = validateOptions(opts);
+    validated = validateOptions(specOptions);
   } catch (error) {
     if (error instanceof OptionConflictError) {
       process.stderr.write(`error: ${error.message}\n`);

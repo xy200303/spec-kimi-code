@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorCodes, KimiError } from '@moonshot-ai/kimi-code-sdk';
 
-import { validateOptions } from '#/cli/options';
+import { SPEC_CODING_ENV, validateOptions } from '#/cli/options';
 import type { CLIOptions } from '#/cli/options';
 import type * as OptionsModule from '#/cli/options';
 import { runPrompt } from '#/cli/run-prompt';
@@ -203,8 +203,15 @@ async function runHandleUpgradeCommand(): Promise<number> {
 }
 
 describe('main entry command handling', () => {
+  const originalSpecCodingEnv = process.env[SPEC_CODING_ENV];
+
   afterEach(() => {
     vi.clearAllMocks();
+    if (originalSpecCodingEnv === undefined) {
+      delete process.env[SPEC_CODING_ENV];
+    } else {
+      process.env[SPEC_CODING_ENV] = originalSpecCodingEnv;
+    }
   });
 
   beforeEach(() => {
@@ -222,19 +229,33 @@ describe('main entry command handling', () => {
 
   it('runs update preflight before starting the shell', async () => {
     const opts = defaultOpts();
-    mocks.validateOptions.mockReturnValue({ options: opts, uiMode: 'shell' });
+    mocks.validateOptions.mockImplementation((value: CLIOptions) => ({ options: value, uiMode: 'shell' }));
     mocks.runUpdatePreflight.mockResolvedValue('continue');
     mocks.runShell.mockResolvedValue(void 0);
 
     const exitCode = await runHandleMainCommand(opts);
 
     expect(exitCode).toBeNull();
-    expect(validateOptions).toHaveBeenCalledWith(opts);
+    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: true }));
     expect(runUpdatePreflight).toHaveBeenCalledWith('0.0.1-alpha.2', { track: expect.any(Function) });
     expect(mocks.runUpdatePreflight.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.runShell.mock.invocationCallOrder[0]!,
     );
-    expect(runShell).toHaveBeenCalledWith(opts, '0.0.1-alpha.2');
+    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: true }), '0.0.1-alpha.2');
+  });
+
+  it('starts interactive sessions in spec plan mode', async () => {
+    const opts = defaultOpts();
+    mocks.validateOptions.mockImplementation((value: CLIOptions) => ({ options: value, uiMode: 'shell' }));
+    mocks.runUpdatePreflight.mockResolvedValue('continue');
+    mocks.runShell.mockResolvedValue(void 0);
+
+    const exitCode = await runHandleMainCommand(opts);
+
+    expect(exitCode).toBeNull();
+    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: true }));
+    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: true }), '0.0.1-alpha.2');
+    expect(process.env[SPEC_CODING_ENV]).toBe('1');
   });
 
   it('runs prompt mode without interactive update preflight', async () => {
