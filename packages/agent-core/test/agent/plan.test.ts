@@ -81,6 +81,7 @@ describe('manual plan entry', () => {
       root: '/workspace/specs/project-documents',
       spec: '/workspace/specs/project-documents/spec.md',
       design: '/workspace/specs/project-documents/design.md',
+      delivery: '/workspace/specs/project-documents/delivery.md',
     });
     expect(ctx.agent.planMode.writableFilePaths).toEqual([
       '/workspace/specs/project-documents/spec.md',
@@ -93,6 +94,10 @@ describe('manual plan entry', () => {
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/design.md',
       expect.stringContaining('# Design'),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      '/workspace/specs/project-documents/delivery.md',
+      expect.stringContaining('# Delivery Record'),
     );
   });
 
@@ -242,6 +247,99 @@ describe('spec coding approval', () => {
     ).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Design is incomplete');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Tasks, Risks, Verification');
+  });
+
+  it('points to the delivery record after an approved design', async () => {
+    const files = new Map<string, string>();
+    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
+    const writeText = vi.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return content.length;
+    });
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+      kaos: createPlanKaos({ readText, writeText }),
+    });
+    ctx.configure({ tools: ['ExitPlanMode'] });
+    await ctx.rpc.setPermission({ mode: 'auto' });
+    await ctx.agent.planMode.enter('delivery-record');
+
+    const documents = ctx.agent.planMode.specDocuments;
+    if (documents === null) throw new Error('expected specification documents');
+    files.set(
+      documents.spec,
+      '# Specification\n\n## Goal\n\nAdd a delivery record.\n\n## Constraints\n\nKeep it project-local.\n\n## Acceptance Criteria\n\n- Record verification results.',
+    );
+    files.set(
+      documents.design,
+      '# Design\n\n## Tasks\n\n- Add the template.\n\n## Risks\n\n- Missing evidence.\n\n## Verification\n\n- Run targeted tests.',
+    );
+
+    const exitPlanModeCall: ToolCall = {
+      type: 'function',
+      id: 'call_exit_delivery_record',
+      name: 'ExitPlanMode',
+      arguments: '{}',
+    };
+    ctx.mockNextResponse(
+      { type: 'text', text: 'I will submit the design.' },
+      exitPlanModeCall,
+    );
+    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the evidence.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+
+    await ctx.untilTurnEnd();
+    expect(ctx.agent.planMode.isActive).toBe(false);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('update the delivery record');
+  });
+
+  it('keeps the delivery record path after manual plan approval', async () => {
+    const files = new Map<string, string>();
+    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
+    const writeText = vi.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return content.length;
+    });
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+      kaos: createPlanKaos({ readText, writeText }),
+    });
+    ctx.configure({ tools: ['ExitPlanMode'] });
+    await ctx.rpc.setPermission({ mode: 'manual' });
+    await ctx.agent.planMode.enter('manual-delivery-record');
+
+    const documents = ctx.agent.planMode.specDocuments;
+    if (documents === null) throw new Error('expected specification documents');
+    files.set(
+      documents.spec,
+      '# Specification\n\n## Goal\n\nAdd a delivery record.\n\n## Constraints\n\nKeep it project-local.\n\n## Acceptance Criteria\n\n- Record verification results.',
+    );
+    files.set(
+      documents.design,
+      '# Design\n\n## Tasks\n\n- Add the template.\n\n## Risks\n\n- Missing evidence.\n\n## Verification\n\n- Run targeted tests.',
+    );
+
+    const exitPlanModeCall: ToolCall = {
+      type: 'function',
+      id: 'call_exit_manual_delivery_record',
+      name: 'ExitPlanMode',
+      arguments: '{}',
+    };
+    ctx.mockNextResponse(
+      { type: 'text', text: 'I will submit the design.' },
+      exitPlanModeCall,
+    );
+    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the evidence.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+
+    const approval = await ctx.takeApprovalRequest();
+    approval.respond({ decision: 'approved' });
+    await ctx.untilTurnEnd();
+
+    expect(ctx.agent.planMode.isActive).toBe(false);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('update the delivery record');
   });
 });
 

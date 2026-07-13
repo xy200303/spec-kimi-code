@@ -48,6 +48,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
 
     const selected = selectedExitPlanModeOption(display.options, result.selectedLabel);
 
+    const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const failed = this.exitPlanMode();
     if (failed !== undefined) {
       return { kind: 'result' as const, syntheticResult: failed };
@@ -67,7 +68,11 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
         ? ''
         : `Selected approach: ${selected.label}\nExecute ONLY the selected approach. Do not execute any unselected alternatives.\n\n`;
     const savedTo = display.path !== undefined ? `Plan saved to: ${display.path}\n\n` : '';
-    const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}`;
+    const delivery =
+      deliveryPath === undefined
+        ? ''
+        : `\n\nAfter implementation and verification, update the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
+    const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}${delivery}`;
     return {
       kind: 'result' as const,
       syntheticResult: {

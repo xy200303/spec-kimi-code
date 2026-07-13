@@ -51,6 +51,7 @@ export class EnterPlanModeTool implements BuiltinTool<EnterPlanModeInput> {
           output: enteredPlanModeMessage(
             this.agent.planMode.planFilePath,
             this.agent.planMode.specDocuments?.spec,
+            this.agent.planMode.specDocuments?.delivery,
           ),
         };
       },
@@ -58,7 +59,11 @@ export class EnterPlanModeTool implements BuiltinTool<EnterPlanModeInput> {
   }
 }
 
-function enteredPlanModeMessage(planPath: string | null, specPath: string | undefined): string {
+function enteredPlanModeMessage(
+  planPath: string | null,
+  specPath: string | undefined,
+  deliveryPath: string | undefined,
+): string {
   if (planPath === null) {
     return [
       'Plan mode is now active. Your workflow:',
@@ -77,6 +82,7 @@ function enteredPlanModeMessage(planPath: string | null, specPath: string | unde
     '',
     `Design file: ${planPath}`,
     ...(specPath === undefined ? [] : [`Specification file: ${specPath}`]),
+    ...(deliveryPath === undefined ? [] : [`Delivery record: ${deliveryPath}`]),
     '',
     '1. Use read-only tools (Read, Grep, Glob) to investigate the codebase. Use Bash only when needed.',
     '2. Design a concrete, step-by-step plan.',

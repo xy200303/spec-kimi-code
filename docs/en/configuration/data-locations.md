@@ -78,7 +78,7 @@ Inside each session directory:
 - **`upcoming-goals.json`**: the TUI-only queue created by `/goal next <objective>`. It is not part of the agent conversation until a queued goal is promoted after the current goal completes.
 - **`agents/main/wire.jsonl`**: the main Agent's complete communication record, used for session resumption and replay.
 - **`agents/main/plans/`**: plan files written in Plan mode, named by plan id (`<id>.md`).
-- **`<workspace>/specs/<plan-id>/`**: when `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, project-local Plan mode documents. `spec.md` records the specification and `design.md` records the implementation design; this directory is outside `KIMI_CODE_HOME` so it can be committed with the project.
+- **`<workspace>/specs/<plan-id>/`**: when `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, project-local Plan mode documents. `spec.md` records the specification, `design.md` records the implementation design, and `delivery.md` records delivery evidence; this directory is outside `KIMI_CODE_HOME` so it can be committed with the project.
 - **`agents/agent-0/` etc.**: sub-Agent instance directories, each containing their own `wire.jsonl`.
 - **`logs/kimi-code.log`**: diagnostic log for this session; only present when a diagnostic event occurs.
 - **`tasks/`**: background task persistence — `tasks/<task_id>.json` stores status/pid/exit code; `tasks/<task_id>/output.log` stores output.

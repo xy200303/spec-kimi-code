@@ -134,6 +134,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
       has_options: args.options !== undefined && args.options.length >= 2,
     });
 
+    const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const failed = this.exitPlanMode();
     if (failed !== undefined) return failed;
 
@@ -141,7 +142,11 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
 
     return {
       isError: false,
-      output: `Exited plan mode. ${formatPlanForOutput(resolvedPlan.plan, resolvedPlan.path)}`,
+      output: `Exited plan mode. ${formatPlanForOutput(
+        resolvedPlan.plan,
+        resolvedPlan.path,
+        deliveryPath,
+      )}`,
     };
   }
 
@@ -266,7 +271,15 @@ function normalizeOptionLabel(label: string): string {
   return label.trim().toLowerCase();
 }
 
-function formatPlanForOutput(plan: string, path: string | undefined): string {
+function formatPlanForOutput(
+  plan: string,
+  path: string | undefined,
+  deliveryPath: string | undefined,
+): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}`;
+  const delivery =
+    deliveryPath === undefined
+      ? ''
+      : `\n\nAfter implementation and verification, update the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
 }

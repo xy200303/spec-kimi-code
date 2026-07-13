@@ -15,6 +15,7 @@ export interface SpecDocumentPaths {
   readonly root: string;
   readonly spec: string;
   readonly design: string;
+  readonly delivery: string;
 }
 
 export const REQUIRED_SPECIFICATION_SECTIONS = [
@@ -59,6 +60,29 @@ const DESIGN_TEMPLATE = `# Design
 ## Verification
 `;
 
+const DELIVERY_TEMPLATE = `# Delivery Record
+
+## Goal
+
+## Constraints
+
+## Plan
+
+## Tasks
+
+## Changes
+
+## Evidence
+
+## Decisions
+
+## Risks
+
+## Open Questions
+
+## Rollback Notes
+`;
+
 export class PlanMode {
   protected _isActive = false;
   protected _planId: null | string = null;
@@ -91,6 +115,7 @@ export class PlanMode {
       if (this._specDocuments !== null) {
         await this.writeSpecTemplate(this._specDocuments.spec);
         await this.writeDesignTemplate(planFilePath);
+        await this.writeDeliveryTemplate(this._specDocuments.delivery);
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
@@ -227,6 +252,10 @@ export class PlanMode {
     await this.agent.kaos.writeText(path, DESIGN_TEMPLATE);
   }
 
+  private async writeDeliveryTemplate(path: string): Promise<void> {
+    await this.agent.kaos.writeText(path, DELIVERY_TEMPLATE);
+  }
+
   private async ensurePlanDirectory(path: string): Promise<void> {
     await this.agent.kaos.mkdir(dirname(path), {
       parents: true,
@@ -249,6 +278,7 @@ export class PlanMode {
       root,
       spec: join(root, 'spec.md'),
       design: join(root, 'design.md'),
+      delivery: join(root, 'delivery.md'),
     };
   }
 }
