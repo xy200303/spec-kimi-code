@@ -7,6 +7,7 @@
  */
 
 import type { Agent } from '#/agent';
+import { formatSpecStrategyDecision } from '#/agent/plan/strategy-router';
 import type { PlanData } from '#/agent/plan';
 import { z } from 'zod';
 
@@ -14,6 +15,7 @@ import type { BuiltinTool } from '../../../agent/tool';
 import type { ExecutableToolResult, ToolExecution } from '../../../loop/types';
 import type { ToolInputDisplay } from '../../display';
 import { toInputJsonSchema } from '../../support/input-schema';
+import type { SpecStrategyDecision } from '../state/spec-delivery';
 import DESCRIPTION from './exit-plan-mode.md?raw';
 
 // ── Input schema ─────────────────────────────────────────────────────
@@ -87,9 +89,13 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   constructor(private readonly agent: Agent) {}
 
   async resolveExecution(args: ExitPlanModeInput): Promise<ToolExecution> {
+    const display = await this.resolvePlanReviewDisplay(args);
+    if (display?.kind === 'plan_review') {
+      await this.agent.planMode.routeSpecStrategy().catch(() => null);
+    }
     return {
       description: 'Presenting plan and exiting plan mode',
-      display: await this.resolvePlanReviewDisplay(args),
+      display,
       approvalRule: this.name,
       execute: () => this.execution(args),
     };
@@ -136,6 +142,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
 
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const qualityGate = this.agent.planMode.qualityGate;
+    const strategy = this.agent.planMode.strategy;
     const failed = this.exitPlanMode();
     if (failed !== undefined) return failed;
 
@@ -148,6 +155,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
         resolvedPlan.path,
         deliveryPath,
         qualityGate,
+        strategy,
       )}`,
     };
   }
@@ -278,11 +286,12 @@ function formatPlanForOutput(
   path: string | undefined,
   deliveryPath: string | undefined,
   qualityGate: string | null,
+  strategy: SpecStrategyDecision | null,
 ): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
   const delivery =
     deliveryPath === undefined
       ? ''
       : `\n\nAfter implementation and verification, use SpecDelivery to satisfy the ${qualityGate ?? 'standard'} quality gate and write the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${formatSpecStrategyDecision(strategy)}${delivery}`;
 }

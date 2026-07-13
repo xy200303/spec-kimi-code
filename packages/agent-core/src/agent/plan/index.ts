@@ -5,6 +5,7 @@ import type { Agent } from '..';
 import {
   SPEC_DELIVERY_STORE_KEY,
   type SpecDeliveryContext,
+  type SpecStrategyDecision,
 } from '../../tools/builtin/state/spec-delivery';
 import {
   SPEC_TASK_ACTIVE_STORE_KEY,
@@ -12,6 +13,7 @@ import {
   SPEC_TASK_TRACE_STORE_KEY,
 } from '../../tools/builtin/state/spec-task-list';
 import { generateHeroSlug } from '../../utils/hero-slug';
+import { routeSpecDevelopmentStrategy } from './strategy-router';
 
 export type PlanData = null | {
   id: string;
@@ -81,6 +83,8 @@ function deliveryTemplate(qualityGate: SpecQualityGate): string {
 
 ${qualityGate}
 
+## Development Strategy
+
 ## Goal
 
 ## Constraints
@@ -111,6 +115,7 @@ export class PlanMode {
   protected _planFilePath: PlanFilePath = null;
   protected _specDocuments: SpecDocumentPaths | null = null;
   protected _qualityGate: SpecQualityGate | null = null;
+  protected _strategy: SpecStrategyDecision | null = null;
 
   constructor(protected readonly agent: Agent) {}
 
@@ -128,6 +133,7 @@ export class PlanMode {
     this._specDocuments = this.specDocumentsFor(id);
     this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
     this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
+    this._strategy = null;
 
     let enterRecorded = false;
     try {
@@ -149,6 +155,7 @@ export class PlanMode {
         this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
           ...this._specDocuments,
           qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
+          strategy: undefined,
         } satisfies SpecDeliveryContext);
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
@@ -162,6 +169,7 @@ export class PlanMode {
         this._planFilePath = null;
         this._specDocuments = null;
         this._qualityGate = null;
+        this._strategy = null;
       }
       throw error;
     }
@@ -180,6 +188,7 @@ export class PlanMode {
     this._specDocuments = this.specDocumentsFor(id);
     this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
     this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
+    this._strategy = null;
   }
 
   cancel(id?: string): void {
@@ -194,6 +203,7 @@ export class PlanMode {
     this._planFilePath = null;
     this._specDocuments = null;
     this._qualityGate = null;
+    this._strategy = null;
     if (hadSpecDocuments) {
       this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
       this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
@@ -219,6 +229,7 @@ export class PlanMode {
     this._planFilePath = null;
     this._specDocuments = null;
     this._qualityGate = null;
+    this._strategy = null;
     this.agent.emitStatusUpdated();
   }
 
@@ -236,6 +247,27 @@ export class PlanMode {
 
   get qualityGate(): SpecQualityGate | null {
     return this._qualityGate;
+  }
+
+  get strategy(): SpecStrategyDecision | null {
+    return this._strategy;
+  }
+
+  async routeSpecStrategy(): Promise<SpecStrategyDecision | null> {
+    const documents = this._specDocuments;
+    if (documents === null) return null;
+    const [specification, design] = await Promise.all([
+      this.agent.kaos.readText(documents.spec),
+      this.agent.kaos.readText(documents.design),
+    ]);
+    const strategy = routeSpecDevelopmentStrategy(specification, design);
+    this._strategy = strategy;
+    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
+      ...documents,
+      qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
+      strategy,
+    } satisfies SpecDeliveryContext);
+    return strategy;
   }
 
   get writableFilePaths(): readonly string[] {

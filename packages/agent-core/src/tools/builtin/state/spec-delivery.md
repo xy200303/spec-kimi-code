@@ -1,3 +1,3 @@
-Create the project-local delivery record for the active spec coding run.
+Create the project-local delivery record for the active spec coding run. The approved plan's automatically selected development strategy and its recommendation are included in the record.
 
 Call this after implementation has produced task, change, and tool-result traces. Every quality-gate evidence item must reference its successful foreground `Bash` `toolCallId`; a background command is not proof that verification has finished. Provide any decisions, risks, open questions, or rollback notes that are not already present in the specification and design. Set `complete` to `true` only when every spec task is done and every evidence category required by the selected quality gate has a verified tool call. The tool writes the structured record to the run's `delivery.md` file.

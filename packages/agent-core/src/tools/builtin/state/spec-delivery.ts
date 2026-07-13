@@ -18,6 +18,22 @@ export const SPEC_DELIVERY_TOOL_NAME = 'SpecDelivery' as const;
 export const SPEC_DELIVERY_STORE_KEY = 'specDelivery' as const;
 
 export type SpecQualityGate = 'fast' | 'standard' | 'strict' | 'release';
+export type SpecDevelopmentStrategy =
+  | 'planning'
+  | 'agile_mvp'
+  | 'controlled_feature'
+  | 'bug_diagnosis'
+  | 'refactor'
+  | 'review'
+  | 'release'
+  | 'research';
+
+export interface SpecStrategyDecision {
+  readonly strategy: SpecDevelopmentStrategy;
+  readonly recommendedQualityGate: SpecQualityGate;
+  readonly reasons: readonly string[];
+}
+
 export type SpecEvidenceKind =
   | 'validation'
   | 'tests'
@@ -35,6 +51,7 @@ export interface SpecDeliveryContext {
   readonly design: string;
   readonly delivery: string;
   readonly qualityGate: SpecQualityGate;
+  readonly strategy?: SpecStrategyDecision;
 }
 
 export interface SpecEvidence {
@@ -292,6 +309,10 @@ function renderDeliveryRecord(input: DeliveryRecordInput): string {
 
 ${input.context.qualityGate}
 
+## Development Strategy
+
+${renderStrategy(input.context.strategy)}
+
 ## Status
 
 ${input.complete ? 'Complete' : 'Draft'}
@@ -374,6 +395,16 @@ function renderTasks(tasks: readonly SpecTask[]): string {
     .join('\n');
 }
 
+function renderStrategy(strategy: SpecStrategyDecision | undefined): string {
+  if (strategy === undefined) return 'Not routed.';
+  return [
+    `Selected: ${strategy.strategy}`,
+    `Recommended quality gate: ${strategy.recommendedQualityGate}`,
+    'Reasons:',
+    ...strategy.reasons.map((reason) => `- ${reason}`),
+  ].join('\n');
+}
+
 function changedPaths(
   tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
@@ -435,10 +466,32 @@ function isSpecDeliveryContext(value: unknown): value is SpecDeliveryContext {
     typeof context['spec'] === 'string' &&
     typeof context['design'] === 'string' &&
     typeof context['delivery'] === 'string' &&
+    (context['strategy'] === undefined || isSpecStrategyDecision(context['strategy'])) &&
     (context['qualityGate'] === 'fast' ||
       context['qualityGate'] === 'standard' ||
       context['qualityGate'] === 'strict' ||
       context['qualityGate'] === 'release')
+  );
+}
+
+function isSpecStrategyDecision(value: unknown): value is SpecStrategyDecision {
+  if (value === null || typeof value !== 'object') return false;
+  const strategy = value as Record<string, unknown>;
+  return (
+    (strategy['strategy'] === 'planning' ||
+      strategy['strategy'] === 'agile_mvp' ||
+      strategy['strategy'] === 'controlled_feature' ||
+      strategy['strategy'] === 'bug_diagnosis' ||
+      strategy['strategy'] === 'refactor' ||
+      strategy['strategy'] === 'review' ||
+      strategy['strategy'] === 'release' ||
+      strategy['strategy'] === 'research') &&
+    (strategy['recommendedQualityGate'] === 'fast' ||
+      strategy['recommendedQualityGate'] === 'standard' ||
+      strategy['recommendedQualityGate'] === 'strict' ||
+      strategy['recommendedQualityGate'] === 'release') &&
+    Array.isArray(strategy['reasons']) &&
+    strategy['reasons'].every((reason) => typeof reason === 'string')
   );
 }
 

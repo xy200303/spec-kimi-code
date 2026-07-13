@@ -1,4 +1,5 @@
 import type { Agent } from '../..';
+import { formatSpecStrategyDecision } from '../../plan/strategy-router';
 import type { ApprovalResponse, PermissionPolicy, PermissionPolicyContext, PermissionPolicyResult } from '../types';
 
 interface ExitPlanModeOption {
@@ -50,6 +51,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
 
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const qualityGate = this.agent.planMode.qualityGate;
+    const strategy = this.agent.planMode.strategy;
     const failed = this.exitPlanMode();
     if (failed !== undefined) {
       return { kind: 'result' as const, syntheticResult: failed };
@@ -73,7 +75,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
       deliveryPath === undefined
         ? ''
         : `\n\nAfter implementation and verification, use SpecDelivery to satisfy the ${qualityGate ?? 'standard'} quality gate and write the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
-    const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}${delivery}`;
+    const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}${formatSpecStrategyDecision(strategy)}${delivery}`;
     return {
       kind: 'result' as const,
       syntheticResult: {

@@ -93,6 +93,14 @@ describe('SpecDeliveryTool', () => {
       },
     ];
     store.set(SPEC_TASK_STORE_KEY, tasks);
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      strategy: {
+        strategy: 'bug_diagnosis',
+        recommendedQualityGate: 'strict',
+        reasons: ['Matched "regression" in the approved specification or design.'],
+      },
+    });
     store.set(SPEC_TASK_TRACE_STORE_KEY, [
       {
         taskId: 'task-delivery',
@@ -121,6 +129,8 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('## Status\n\nDraft');
     expect(files.get(context.delivery)).toContain('Create a traceable delivery record.');
     expect(files.get(context.delivery)).toContain('[done] task-delivery');
+    expect(files.get(context.delivery)).toContain('Selected: bug_diagnosis');
+    expect(files.get(context.delivery)).toContain('Recommended quality gate: strict');
     expect(files.get(context.delivery)).toContain('src/delivery.ts');
     expect(files.get(context.delivery)).toContain('[succeeded] pnpm test delivery');
   });

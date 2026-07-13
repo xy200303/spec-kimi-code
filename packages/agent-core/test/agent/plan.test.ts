@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { FlagResolver } from '../../src/flags';
 import { resolveSpecQualityGate } from '../../src/agent/plan';
+import { routeSpecDevelopmentStrategy } from '../../src/agent/plan/strategy-router';
+import { SPEC_DELIVERY_STORE_KEY } from '../../src/tools/builtin/state/spec-delivery';
 import {
   SPEC_TASK_ACTIVE_STORE_KEY,
   SPEC_TASK_STORE_KEY,
@@ -176,6 +178,32 @@ describe('spec quality gates', () => {
   });
 });
 
+describe('spec development strategy router', () => {
+  it.each([
+    ['release', 'Prepare a deployment release.', 'release', 'release'],
+    ['bug diagnosis', 'Fix a production regression.', 'bug_diagnosis', 'strict'],
+    ['refactor', 'Refactor the session flow.', 'refactor', 'strict'],
+    ['review', 'Audit the permission policy.', 'review', 'strict'],
+    ['research', 'Research the provider options.', 'research', 'fast'],
+    ['MVP', 'Build an MVP prototype.', 'agile_mvp', 'fast'],
+    ['planning', 'Produce a design-only plan.', 'planning', 'fast'],
+  ] as const)(
+    'routes %s work to %s', (_label, goal, strategy, qualityGate) => {
+      expect(routeSpecDevelopmentStrategy(goal, '')).toMatchObject({
+        strategy,
+        recommendedQualityGate: qualityGate,
+      });
+    },
+  );
+
+  it('uses controlled feature when no specialized signal is present', () => {
+    expect(routeSpecDevelopmentStrategy('Add a structured delivery record.', '')).toMatchObject({
+      strategy: 'controlled_feature',
+      recommendedQualityGate: 'standard',
+    });
+  });
+});
+
 describe('plan clear', () => {
   it('empties the current plan file without leaving plan mode', async () => {
     const files = new Map<string, string>();
@@ -340,6 +368,13 @@ describe('spec coding approval', () => {
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('standard quality gate');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
+    expect(ctx.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]).toMatchObject({
+      strategy: {
+        strategy: 'controlled_feature',
+        recommendedQualityGate: 'standard',
+      },
+    });
   });
 
   it('keeps the delivery record path after manual plan approval', async () => {
@@ -388,6 +423,7 @@ describe('spec coding approval', () => {
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
   });
 });
 
