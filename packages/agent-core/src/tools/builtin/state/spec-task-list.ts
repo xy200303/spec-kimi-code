@@ -261,6 +261,6 @@ function hasUniqueTaskIds(tasks: readonly SpecTask[]): boolean {
   return new Set(tasks.map((task) => task.id)).size === tasks.length;
 }
 
-function isActiveTask(task: SpecTask | undefined): task is SpecTask {
+function isActiveTask(task: SpecTask | undefined): boolean {
   return task !== undefined && (task.status === 'pending' || task.status === 'in_progress');
 }

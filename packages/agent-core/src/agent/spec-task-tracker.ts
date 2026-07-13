@@ -40,12 +40,13 @@ export class SpecTaskTracker {
     const trace = this.traceFor(taskId, input);
     this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, [...this.traces(), trace]);
 
-    if (input.result.isError !== true && trace.changedPaths !== undefined) {
+    const changedPaths = trace.changedPaths;
+    if (input.result.isError !== true && changedPaths !== undefined) {
       this.agent.tools.updateStore(
         SPEC_TASK_STORE_KEY,
         tasks.map((item) =>
           item.id === task.id
-            ? { ...item, changedPaths: mergePaths(item.changedPaths, trace.changedPaths) }
+            ? { ...item, changedPaths: mergePaths(item.changedPaths, changedPaths) }
             : item,
         ),
       );
