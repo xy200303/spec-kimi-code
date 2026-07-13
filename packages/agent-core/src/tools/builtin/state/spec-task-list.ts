@@ -30,6 +30,7 @@ export interface SpecTaskTrace {
   readonly toolCallId: string;
   readonly toolName: string;
   readonly outcome: 'failed' | 'succeeded';
+  readonly background?: boolean;
   readonly changedPaths?: readonly string[];
   readonly command?: string;
   readonly delegation?: string;

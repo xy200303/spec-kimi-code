@@ -40,6 +40,7 @@ export interface SpecDeliveryContext {
 export interface SpecEvidence {
   readonly kind: SpecEvidenceKind;
   readonly detail: string;
+  readonly toolCallId: string;
 }
 
 declare module '../../store' {
@@ -62,6 +63,11 @@ const SpecEvidenceSchema = z
       'release_notes',
     ]),
     detail: z.string().trim().min(1).describe('Command or observation that proves this evidence.'),
+    toolCallId: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Successful foreground Bash tool call that produced this evidence.'),
   })
   .strict();
 
@@ -71,8 +77,9 @@ export const SpecDeliveryInputSchema = z
   .object({
     evidence: z
       .array(SpecEvidenceSchema)
+      .refine(hasUniqueEvidenceKinds, 'Evidence kinds must be unique.')
       .optional()
-      .describe('Evidence collected for the selected quality gate.'),
+      .describe('Evidence collected for the selected quality gate, each linked to a Bash tool call.'),
     decisions: NoteListSchema.optional().describe('Implementation decisions to retain in the record.'),
     risks: NoteListSchema.optional().describe('Residual risks after implementation.'),
     openQuestions: NoteListSchema.optional().describe('Questions that remain unresolved.'),
@@ -149,16 +156,21 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
     }
 
     const tasks = this.tasks();
+    const traces = this.traces();
     const evidence = args.evidence ?? [];
     const incompleteTasks = tasks.filter((task) => task.status !== 'done');
     const missingEvidence = missingEvidenceKinds(context.qualityGate, evidence);
+    const unverifiedEvidence = unverifiedEvidenceReferences(evidence, traces);
     if (
       args.complete === true &&
-      (tasks.length === 0 || incompleteTasks.length > 0 || missingEvidence.length > 0)
+      (tasks.length === 0 ||
+        incompleteTasks.length > 0 ||
+        missingEvidence.length > 0 ||
+        unverifiedEvidence.length > 0)
     ) {
       return {
         isError: true,
-        output: completionBlocker(tasks, incompleteTasks, missingEvidence),
+        output: completionBlocker(tasks, incompleteTasks, missingEvidence, unverifiedEvidence),
       };
     }
 
@@ -179,7 +191,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       specification,
       design,
       tasks,
-      traces: this.traces(),
+      traces,
       evidence,
       decisions: args.decisions ?? [],
       risks: args.risks ?? [],
@@ -222,10 +234,22 @@ function missingEvidenceKinds(
   return QUALITY_GATE_EVIDENCE[qualityGate].filter((kind) => !present.has(kind));
 }
 
+function hasUniqueEvidenceKinds(evidence: readonly SpecEvidence[]): boolean {
+  return new Set(evidence.map((item) => item.kind)).size === evidence.length;
+}
+
+function unverifiedEvidenceReferences(
+  evidence: readonly SpecEvidence[],
+  traces: readonly SpecTaskTrace[],
+): readonly SpecEvidence[] {
+  return evidence.filter((item) => successfulForegroundBashTrace(item, traces) === undefined);
+}
+
 function completionBlocker(
   tasks: readonly SpecTask[],
   incompleteTasks: readonly SpecTask[],
   missingEvidence: readonly SpecEvidenceKind[],
+  unverifiedEvidence: readonly SpecEvidence[],
 ): string {
   const lines = ['Delivery cannot be marked complete.'];
   if (tasks.length === 0) lines.push('No spec tasks have been recorded.');
@@ -235,6 +259,11 @@ function completionBlocker(
   if (missingEvidence.length > 0) {
     lines.push(
       `Missing quality-gate evidence: ${missingEvidence.map((kind) => EVIDENCE_LABELS[kind]).join(', ')}`,
+    );
+  }
+  if (unverifiedEvidence.length > 0) {
+    lines.push(
+      `Unverified evidence references: ${unverifiedEvidence.map(formatEvidenceReference).join(', ')}`,
     );
   }
   return lines.join('\n');
@@ -362,17 +391,36 @@ function renderEvidence(
   evidence: readonly SpecEvidence[],
   traces: readonly SpecTaskTrace[],
 ): string {
-  const details = new Map(evidence.map((item) => [item.kind, item.detail]));
   const checklist = QUALITY_GATE_EVIDENCE[qualityGate].map((kind) => {
-    const detail = details.get(kind);
-    return detail === undefined
-      ? `- [ ] ${EVIDENCE_LABELS[kind]}`
-      : `- [x] ${EVIDENCE_LABELS[kind]}: ${detail}`;
+    const item = evidence.find((candidate) => candidate.kind === kind);
+    if (item === undefined) return `- [ ] ${EVIDENCE_LABELS[kind]}`;
+    const trace = successfulForegroundBashTrace(item, traces);
+    return trace === undefined
+      ? `- [ ] ${EVIDENCE_LABELS[kind]}: ${item.detail} (${formatEvidenceReference(item)})`
+      : `- [x] ${EVIDENCE_LABELS[kind]}: ${item.detail} (${formatEvidenceReference(item)}; ${trace.command})`;
   });
   const commands = traces
     .filter((trace) => trace.command !== undefined)
     .map((trace) => `- [${trace.outcome}] ${trace.command}`);
   return [...checklist, ...commands].join('\n');
+}
+
+function successfulForegroundBashTrace(
+  evidence: SpecEvidence,
+  traces: readonly SpecTaskTrace[],
+): SpecTaskTrace | undefined {
+  return traces.find(
+    (trace) =>
+      trace.toolCallId === evidence.toolCallId &&
+      trace.toolName === 'Bash' &&
+      trace.outcome === 'succeeded' &&
+      trace.background !== true &&
+      trace.command !== undefined,
+  );
+}
+
+function formatEvidenceReference(evidence: SpecEvidence): string {
+  return `tool call ${evidence.toolCallId}`;
 }
 
 function renderList(items: readonly string[], empty: string): string {

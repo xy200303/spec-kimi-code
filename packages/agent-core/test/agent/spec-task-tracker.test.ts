@@ -45,6 +45,7 @@ describe('SpecTaskTracker', () => {
         toolCallId: 'call_write_spec',
         toolName: 'Write',
         outcome: 'succeeded',
+        background: undefined,
         changedPaths: ['/workspace/specs/run/spec.md'],
         command: undefined,
         delegation: undefined,
@@ -70,7 +71,7 @@ describe('SpecTaskTracker', () => {
     ctx.agent.specTaskTracker.recordToolResult({
       toolCallId: 'call_test',
       toolName: 'Bash',
-      args: { command: 'pnpm test' },
+      args: { command: 'pnpm test', run_in_background: true },
       result: { output: 'failed', isError: true },
     });
 
@@ -81,6 +82,7 @@ describe('SpecTaskTracker', () => {
         toolCallId: 'call_test',
         toolName: 'Bash',
         outcome: 'failed',
+        background: true,
         changedPaths: undefined,
         command: 'pnpm test',
         delegation: undefined,

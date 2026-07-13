@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FlagResolver } from '../../src/flags';
 import {
   SPEC_DELIVERY_STORE_KEY,
+  SpecDeliveryInputSchema,
   SpecDeliveryTool,
   type SpecDeliveryContext,
 } from '../../src/tools/builtin/state/spec-delivery';
@@ -16,7 +17,7 @@ import { createFakeKaos } from './fixtures/fake-kaos';
 import { executeTool } from './fixtures/execute-tool';
 import { testAgent } from '../agent/harness/agent';
 
-// Scenarios: delivery drafts and completions.
+// Scenarios: evidence validation, delivery drafts, and completions.
 // Wiring: real agent state and an in-memory Kaos filesystem.
 // Run: vitest spec-delivery.test.ts.
 const signal = new AbortController().signal;
@@ -61,6 +62,25 @@ async function createRig() {
 }
 
 describe('SpecDeliveryTool', () => {
+  it('rejects evidence without a tool call identifier during input validation', () => {
+    expect(
+      SpecDeliveryInputSchema.safeParse({
+        evidence: [{ kind: 'tests', detail: 'pnpm test' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects duplicate evidence types during input validation', () => {
+    expect(
+      SpecDeliveryInputSchema.safeParse({
+        evidence: [
+          { kind: 'tests', detail: 'pnpm test', toolCallId: 'call-test' },
+          { kind: 'tests', detail: 'pnpm test again', toolCallId: 'call-test-again' },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('writes a structured draft when the run has tracked work', async () => {
     const { context, files, store, tool } = await createRig();
     const tasks: readonly SpecTask[] = [
@@ -87,7 +107,9 @@ describe('SpecDeliveryTool', () => {
       turnId: 't1',
       toolCallId: 'call-delivery',
       args: {
-        evidence: [{ kind: 'tests', detail: 'pnpm test delivery' }],
+        evidence: [
+          { kind: 'tests', detail: 'pnpm test delivery', toolCallId: 'call-test' },
+        ],
         decisions: ['Use a generated Markdown record.'],
         rollbackNotes: ['Delete the delivery record and revert the feature.'],
       },
@@ -118,13 +140,17 @@ describe('SpecDeliveryTool', () => {
     const result = await executeTool(tool, {
       turnId: 't1',
       toolCallId: 'call-complete',
-      args: { complete: true, evidence: [{ kind: 'tests', detail: 'pnpm test' }] },
+      args: {
+        complete: true,
+        evidence: [{ kind: 'tests', detail: 'pnpm test', toolCallId: 'call-test' }],
+      },
       signal,
     });
 
     expect(result).toMatchObject({ isError: true });
     expect(result.output).toContain('Incomplete spec tasks: task-verify');
     expect(result.output).toContain('Typecheck or build');
+    expect(result.output).toContain('Unverified evidence references: tool call call-test');
     expect(files.get(context.delivery)).toBe(initial);
   });
 
@@ -138,6 +164,36 @@ describe('SpecDeliveryTool', () => {
         reason: 'Close the approved work.',
       },
     ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm test',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-typecheck',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm typecheck',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-lint',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm lint',
+      },
+      {
+        taskId: 'task-complete',
+        toolCallId: 'call-diff',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'git diff --check',
+      },
+    ]);
 
     const result = await executeTool(tool, {
       turnId: 't1',
@@ -145,10 +201,18 @@ describe('SpecDeliveryTool', () => {
       args: {
         complete: true,
         evidence: [
-          { kind: 'tests', detail: 'pnpm test' },
-          { kind: 'typecheck_or_build', detail: 'pnpm typecheck' },
-          { kind: 'lint_or_format', detail: 'pnpm lint' },
-          { kind: 'diff_review', detail: 'Reviewed the final diff.' },
+          { kind: 'tests', detail: 'pnpm test', toolCallId: 'call-tests' },
+          {
+            kind: 'typecheck_or_build',
+            detail: 'pnpm typecheck',
+            toolCallId: 'call-typecheck',
+          },
+          { kind: 'lint_or_format', detail: 'pnpm lint', toolCallId: 'call-lint' },
+          {
+            kind: 'diff_review',
+            detail: 'Reviewed the final diff.',
+            toolCallId: 'call-diff',
+          },
         ],
       },
       signal,
@@ -158,5 +222,73 @@ describe('SpecDeliveryTool', () => {
     expect(result.output).toContain('Completed delivery record');
     expect(files.get(context.delivery)).toContain('## Status\n\nComplete');
     expect(files.get(context.delivery)).toContain('[x] Diff review: Reviewed the final diff.');
+    expect(files.get(context.delivery)).toContain('tool call call-diff; git diff --check');
+  });
+
+  it('rejects completion when evidence references a background Bash call', async () => {
+    const { context, files, store, tool } = await createRig();
+    const initial = files.get(context.delivery);
+    store.set(SPEC_TASK_STORE_KEY, [
+      {
+        id: 'task-verify',
+        title: 'Verify delivery',
+        status: 'done',
+        reason: 'Ensure the output is ready.',
+      },
+    ]);
+    store.set(SPEC_TASK_TRACE_STORE_KEY, [
+      {
+        taskId: 'task-verify',
+        toolCallId: 'call-tests',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        background: true,
+        command: 'pnpm test',
+      },
+      {
+        taskId: 'task-verify',
+        toolCallId: 'call-typecheck',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm typecheck',
+      },
+      {
+        taskId: 'task-verify',
+        toolCallId: 'call-lint',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'pnpm lint',
+      },
+      {
+        taskId: 'task-verify',
+        toolCallId: 'call-diff',
+        toolName: 'Bash',
+        outcome: 'succeeded',
+        command: 'git diff --check',
+      },
+    ]);
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-complete',
+      args: {
+        complete: true,
+        evidence: [
+          { kind: 'tests', detail: 'pnpm test', toolCallId: 'call-tests' },
+          {
+            kind: 'typecheck_or_build',
+            detail: 'pnpm typecheck',
+            toolCallId: 'call-typecheck',
+          },
+          { kind: 'lint_or_format', detail: 'pnpm lint', toolCallId: 'call-lint' },
+          { kind: 'diff_review', detail: 'Final diff check', toolCallId: 'call-diff' },
+        ],
+      },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('Unverified evidence references: tool call call-tests');
+    expect(files.get(context.delivery)).toBe(initial);
   });
 });

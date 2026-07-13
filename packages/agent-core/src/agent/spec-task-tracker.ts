@@ -69,6 +69,7 @@ export class SpecTaskTracker {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
       outcome: input.result.isError === true ? 'failed' : 'succeeded',
+      background: isBackgroundBash(input.toolName, input.args),
       changedPaths,
       command: commandFor(input.toolName, input.args),
       delegation: delegationFor(input.toolName, input.args),
@@ -86,6 +87,12 @@ function commandFor(toolName: string, args: unknown): string | undefined {
   return toolName === 'Bash' ? stringField(args, 'command') : undefined;
 }
 
+function isBackgroundBash(toolName: string, args: unknown): boolean | undefined {
+  if (toolName !== 'Bash') return undefined;
+  const value = booleanField(args, 'run_in_background');
+  return value === true ? true : undefined;
+}
+
 function delegationFor(toolName: string, args: unknown): string | undefined {
   if (toolName !== 'Agent' && toolName !== 'AgentSwarm') return undefined;
   return stringField(args, 'description') ?? stringField(args, 'prompt');
@@ -95,6 +102,12 @@ function stringField(value: unknown, field: string): string | undefined {
   if (value === null || typeof value !== 'object') return undefined;
   const candidate = (value as Record<string, unknown>)[field];
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
+}
+
+function booleanField(value: unknown, field: string): boolean | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const candidate = (value as Record<string, unknown>)[field];
+  return typeof candidate === 'boolean' ? candidate : undefined;
 }
 
 function mergePaths(
