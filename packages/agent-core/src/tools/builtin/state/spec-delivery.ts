@@ -34,6 +34,11 @@ export interface SpecStrategyDecision {
   readonly reasons: readonly string[];
 }
 
+export interface SpecApprovedSnapshot {
+  readonly specification: string;
+  readonly design: string;
+}
+
 export type SpecEvidenceKind =
   | 'validation'
   | 'tests'
@@ -52,6 +57,7 @@ export interface SpecDeliveryContext {
   readonly delivery: string;
   readonly qualityGate: SpecQualityGate;
   readonly strategy?: SpecStrategyDecision;
+  readonly approved?: SpecApprovedSnapshot;
 }
 
 export interface SpecEvidence {
@@ -191,22 +197,14 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       };
     }
 
-    let specification: string;
-    let design: string;
-    try {
-      [specification, design] = await Promise.all([
-        this.agent.kaos.readText(context.spec),
-        this.agent.kaos.readText(context.design),
-      ]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { isError: true, output: `Failed to read spec documents: ${message}` };
+    const documents = await this.documents(context);
+    if (documents instanceof Error) {
+      return { isError: true, output: `Failed to read spec documents: ${documents.message}` };
     }
 
     const content = renderDeliveryRecord({
       context,
-      specification,
-      design,
+      ...documents,
       tasks,
       traces,
       evidence,
@@ -240,6 +238,21 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
   private traces(): readonly SpecTaskTrace[] {
     const value = this.store.get(SPEC_TASK_TRACE_STORE_KEY);
     return Array.isArray(value) ? value.filter(isSpecTaskTrace) : [];
+  }
+
+  private async documents(
+    context: SpecDeliveryContext,
+  ): Promise<SpecApprovedSnapshot | Error> {
+    if (context.approved !== undefined) return context.approved;
+    try {
+      const [specification, design] = await Promise.all([
+        this.agent.kaos.readText(context.spec),
+        this.agent.kaos.readText(context.design),
+      ]);
+      return { specification, design };
+    } catch (error) {
+      return error instanceof Error ? error : new Error(String(error));
+    }
   }
 }
 
@@ -325,6 +338,10 @@ ${markdownSection(input.specification, 'Goal') || 'Not recorded.'}
 
 ${markdownSection(input.specification, 'Constraints') || 'Not recorded.'}
 
+## Acceptance Criteria
+
+${markdownSection(input.specification, 'Acceptance Criteria') || 'Not recorded.'}
+
 ## Plan
 
 Source design: \`${input.context.design}\`
@@ -362,7 +379,7 @@ ${renderList(input.rollbackNotes, 'No rollback notes recorded.')}
 `;
 }
 
-function markdownSection(content: string, title: string): string {
+export function markdownSection(content: string, title: string): string {
   const lines = content.split(/\r?\n/);
   const headingIndex = lines.findIndex((line) => line.trim() === `## ${title}`);
   if (headingIndex === -1) return '';
@@ -458,7 +475,7 @@ function renderList(items: readonly string[], empty: string): string {
   return items.length === 0 ? empty : items.map((item) => `- ${item}`).join('\n');
 }
 
-function isSpecDeliveryContext(value: unknown): value is SpecDeliveryContext {
+export function isSpecDeliveryContext(value: unknown): value is SpecDeliveryContext {
   if (value === null || typeof value !== 'object') return false;
   const context = value as Record<string, unknown>;
   return (
@@ -466,12 +483,19 @@ function isSpecDeliveryContext(value: unknown): value is SpecDeliveryContext {
     typeof context['spec'] === 'string' &&
     typeof context['design'] === 'string' &&
     typeof context['delivery'] === 'string' &&
+    (context['approved'] === undefined || isSpecApprovedSnapshot(context['approved'])) &&
     (context['strategy'] === undefined || isSpecStrategyDecision(context['strategy'])) &&
     (context['qualityGate'] === 'fast' ||
       context['qualityGate'] === 'standard' ||
       context['qualityGate'] === 'strict' ||
       context['qualityGate'] === 'release')
   );
+}
+
+function isSpecApprovedSnapshot(value: unknown): value is SpecApprovedSnapshot {
+  if (value === null || typeof value !== 'object') return false;
+  const snapshot = value as Record<string, unknown>;
+  return typeof snapshot['specification'] === 'string' && typeof snapshot['design'] === 'string';
 }
 
 function isSpecStrategyDecision(value: unknown): value is SpecStrategyDecision {

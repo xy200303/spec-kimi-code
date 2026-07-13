@@ -21,6 +21,7 @@ tools:
   - ReadMediaFile
   - TodoList
   - SpecTaskList
+  - SpecRun
   - SpecDelivery
   - Skill
   - WebSearch

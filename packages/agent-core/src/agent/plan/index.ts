@@ -89,6 +89,8 @@ ${qualityGate}
 
 ## Constraints
 
+## Acceptance Criteria
+
 ## Plan
 
 ## Tasks
@@ -156,6 +158,7 @@ export class PlanMode {
           ...this._specDocuments,
           qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
           strategy: undefined,
+          approved: undefined,
         } satisfies SpecDeliveryContext);
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
@@ -218,7 +221,8 @@ export class PlanMode {
     await this.writeEmptyPlanFile(this._planFilePath);
   }
 
-  exit(id?: string): void {
+  exit(id?: string, retainSpecRun = true): void {
+    const hadSpecDocuments = this._specDocuments !== null;
     this.agent.records.logRecord({ type: 'plan_mode.exit', id });
     this.agent.replayBuilder.push({
       type: 'plan_updated',
@@ -230,6 +234,12 @@ export class PlanMode {
     this._specDocuments = null;
     this._qualityGate = null;
     this._strategy = null;
+    if (hadSpecDocuments && !retainSpecRun) {
+      this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
+      this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
+      this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
+      this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, null);
+    }
     this.agent.emitStatusUpdated();
   }
 
@@ -266,8 +276,21 @@ export class PlanMode {
       ...documents,
       qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
       strategy,
+      approved: { specification, design },
     } satisfies SpecDeliveryContext);
     return strategy;
+  }
+
+  clearSpecRunApproval(): void {
+    const documents = this._specDocuments;
+    if (documents === null) return;
+    this._strategy = null;
+    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
+      ...documents,
+      qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
+      strategy: undefined,
+      approved: undefined,
+    } satisfies SpecDeliveryContext);
   }
 
   get writableFilePaths(): readonly string[] {

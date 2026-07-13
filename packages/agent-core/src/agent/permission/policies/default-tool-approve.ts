@@ -8,6 +8,7 @@ const DEFAULT_APPROVE_TOOLS = new Set([
   'SetTodoList',
   'TodoList',
   'SpecTaskList',
+  'SpecRun',
   'SpecDelivery',
   'TaskList',
   'TaskOutput',

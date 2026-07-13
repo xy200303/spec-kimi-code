@@ -128,8 +128,9 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/delivery.md',
       expect.stringContaining('## Quality Gate\n\nstandard'),
     );
-    ctx.configure({ tools: ['SpecTaskList', 'SpecDelivery'] });
+    ctx.configure({ tools: ['SpecTaskList', 'SpecRun', 'SpecDelivery'] });
     expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecTaskList')).toBe(true);
+    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecRun')).toBe(true);
     expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecDelivery')).toBe(true);
   });
 
@@ -370,6 +371,10 @@ describe('spec coding approval', () => {
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('standard quality gate');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
     expect(ctx.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]).toMatchObject({
+      approved: {
+        specification: expect.stringContaining('Add a delivery record.'),
+        design: expect.stringContaining('Add the template.'),
+      },
       strategy: {
         strategy: 'controlled_feature',
         recommendedQualityGate: 'standard',

@@ -7,6 +7,7 @@ import {
   SpecDeliveryTool,
   type SpecDeliveryContext,
 } from '../../src/tools/builtin/state/spec-delivery';
+import { SpecRunTool } from '../../src/tools/builtin/state/spec-run';
 import {
   SPEC_TASK_STORE_KEY,
   SPEC_TASK_TRACE_STORE_KEY,
@@ -17,7 +18,7 @@ import { createFakeKaos } from './fixtures/fake-kaos';
 import { executeTool } from './fixtures/execute-tool';
 import { testAgent } from '../agent/harness/agent';
 
-// Scenarios: evidence validation, delivery drafts, and completions.
+// Scenarios: approved-run snapshots, evidence validation, delivery drafts, and completions.
 // Wiring: real agent state and an in-memory Kaos filesystem.
 // Run: vitest spec-delivery.test.ts.
 const signal = new AbortController().signal;
@@ -58,7 +59,13 @@ async function createRig() {
     get: (key) => ctx.agent.tools.storeData()[key] as never,
     set: (key, value) => ctx.agent.tools.updateStore(key, value),
   };
-  return { context, files, store, tool: new SpecDeliveryTool(ctx.agent, store) };
+  return {
+    context,
+    files,
+    store,
+    tool: new SpecDeliveryTool(ctx.agent, store),
+    specRun: new SpecRunTool(store),
+  };
 }
 
 describe('SpecDeliveryTool', () => {
@@ -81,6 +88,29 @@ describe('SpecDeliveryTool', () => {
     ).toBe(false);
   });
 
+  it('returns the approved goal when source documents change', async () => {
+    const { context, files, store, specRun } = await createRig();
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      approved: {
+        specification: files.get(context.spec)!,
+        design: files.get(context.design)!,
+      },
+    });
+    files.set(context.spec, '# Specification\n\n## Goal\n\nChanged after approval.');
+
+    const result = await executeTool(specRun, {
+      turnId: 't1',
+      toolCallId: 'call-spec-run',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: false });
+    expect(result.output).toContain('Create a traceable delivery record.');
+    expect(result.output).not.toContain('Changed after approval.');
+  });
+
   it('writes a structured draft when the run has tracked work', async () => {
     const { context, files, store, tool } = await createRig();
     const tasks: readonly SpecTask[] = [
@@ -95,12 +125,17 @@ describe('SpecDeliveryTool', () => {
     store.set(SPEC_TASK_STORE_KEY, tasks);
     store.set(SPEC_DELIVERY_STORE_KEY, {
       ...context,
+      approved: {
+        specification: files.get(context.spec)!,
+        design: files.get(context.design)!,
+      },
       strategy: {
         strategy: 'bug_diagnosis',
         recommendedQualityGate: 'strict',
         reasons: ['Matched "regression" in the approved specification or design.'],
       },
     });
+    files.set(context.spec, '# Specification\n\n## Goal\n\nChanged after approval.');
     store.set(SPEC_TASK_TRACE_STORE_KEY, [
       {
         taskId: 'task-delivery',
@@ -128,6 +163,7 @@ describe('SpecDeliveryTool', () => {
     expect(result.output).toContain(context.delivery);
     expect(files.get(context.delivery)).toContain('## Status\n\nDraft');
     expect(files.get(context.delivery)).toContain('Create a traceable delivery record.');
+    expect(files.get(context.delivery)).toContain('## Acceptance Criteria\n\n- Include evidence.');
     expect(files.get(context.delivery)).toContain('[done] task-delivery');
     expect(files.get(context.delivery)).toContain('Selected: bug_diagnosis');
     expect(files.get(context.delivery)).toContain('Recommended quality gate: strict');

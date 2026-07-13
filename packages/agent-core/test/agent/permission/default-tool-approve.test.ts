@@ -47,6 +47,10 @@ describe('DefaultToolApprovePermissionPolicy', () => {
     expect(policy.evaluate(policyContext('SpecTaskList', {}))).toEqual({ kind: 'approve' });
   });
 
+  it('auto-approves SpecRun', () => {
+    expect(policy.evaluate(policyContext('SpecRun', {}))).toEqual({ kind: 'approve' });
+  });
+
   it('auto-approves SpecDelivery', () => {
     expect(policy.evaluate(policyContext('SpecDelivery', {}))).toEqual({ kind: 'approve' });
   });
