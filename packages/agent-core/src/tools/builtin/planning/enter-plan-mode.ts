@@ -82,7 +82,7 @@ function enteredPlanModeMessage(planPath: string | null, specPath: string | unde
     '2. Design a concrete, step-by-step plan.',
     specPath === undefined
       ? '3. Write the plan to the plan file with Write or Edit.'
-      : '3. Update the specification, then write the implementation design.',
+      : '3. Update the specification, then write the design with tasks, risks, and verification.',
     '4. When the plan is ready, call ExitPlanMode for user approval.',
     '',
     specPath === undefined

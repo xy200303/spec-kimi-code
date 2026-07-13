@@ -31,6 +31,16 @@ export interface SpecificationData {
   readonly missingSections: readonly RequiredSpecificationSection[];
 }
 
+export const REQUIRED_DESIGN_SECTIONS = ['Tasks', 'Risks', 'Verification'] as const;
+
+export type RequiredDesignSection = (typeof REQUIRED_DESIGN_SECTIONS)[number];
+
+export interface DesignData {
+  readonly path: string;
+  readonly content: string;
+  readonly missingSections: readonly RequiredDesignSection[];
+}
+
 const SPEC_TEMPLATE = `# Specification
 
 ## Goal
@@ -38,6 +48,15 @@ const SPEC_TEMPLATE = `# Specification
 ## Constraints
 
 ## Acceptance Criteria
+`;
+
+const DESIGN_TEMPLATE = `# Design
+
+## Tasks
+
+## Risks
+
+## Verification
 `;
 
 export class PlanMode {
@@ -71,7 +90,7 @@ export class PlanMode {
       enterRecorded = true;
       if (this._specDocuments !== null) {
         await this.writeSpecTemplate(this._specDocuments.spec);
-        await this.writeEmptyPlanFile(planFilePath);
+        await this.writeDesignTemplate(planFilePath);
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
@@ -184,6 +203,17 @@ export class PlanMode {
     };
   }
 
+  async designData(): Promise<DesignData | null> {
+    if (this._specDocuments === null) return null;
+    const data = await this.data();
+    if (data === null) return null;
+    return {
+      path: data.path,
+      content: data.content,
+      missingSections: missingDesignSections(data.content),
+    };
+  }
+
   private async writeEmptyPlanFile(path: string): Promise<void> {
     await this.ensurePlanDirectory(path);
     await this.agent.kaos.writeText(path, '');
@@ -191,6 +221,10 @@ export class PlanMode {
 
   private async writeSpecTemplate(path: string): Promise<void> {
     await this.agent.kaos.writeText(path, SPEC_TEMPLATE);
+  }
+
+  private async writeDesignTemplate(path: string): Promise<void> {
+    await this.agent.kaos.writeText(path, DESIGN_TEMPLATE);
   }
 
   private async ensurePlanDirectory(path: string): Promise<void> {
@@ -222,8 +256,19 @@ export class PlanMode {
 export function missingSpecificationSections(
   content: string,
 ): readonly RequiredSpecificationSection[] {
+  return missingMarkdownSections(content, REQUIRED_SPECIFICATION_SECTIONS);
+}
+
+export function missingDesignSections(content: string): readonly RequiredDesignSection[] {
+  return missingMarkdownSections(content, REQUIRED_DESIGN_SECTIONS);
+}
+
+function missingMarkdownSections<T extends string>(
+  content: string,
+  sections: readonly T[],
+): readonly T[] {
   const lines = content.split(/\r?\n/);
-  return REQUIRED_SPECIFICATION_SECTIONS.filter((section) => {
+  return sections.filter((section) => {
     const headingIndex = lines.findIndex((line) => line.trim() === `## ${section}`);
     if (headingIndex === -1) return true;
     const nextHeadingIndex = lines.findIndex(

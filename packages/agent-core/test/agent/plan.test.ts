@@ -90,7 +90,10 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/spec.md',
       expect.stringContaining('# Specification'),
     );
-    expect(writeText).toHaveBeenCalledWith('/workspace/specs/project-documents/design.md', '');
+    expect(writeText).toHaveBeenCalledWith(
+      '/workspace/specs/project-documents/design.md',
+      expect.stringContaining('# Design'),
+    );
   });
 
   it('enters plan mode through the EnterPlanMode tool and reminds the next step', async () => {
@@ -195,6 +198,50 @@ describe('spec coding approval', () => {
     ).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Specification is incomplete');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Goal, Constraints, Acceptance Criteria');
+  });
+
+  it('requires a complete design before requesting approval', async () => {
+    const files = new Map<string, string>();
+    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
+    const writeText = vi.fn(async (path: string, content: string) => {
+      files.set(path, content);
+      return content.length;
+    });
+    const ctx = testAgent({
+      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
+      kaos: createPlanKaos({ readText, writeText }),
+    });
+    ctx.configure({ tools: ['ExitPlanMode'] });
+    await ctx.rpc.setPermission({ mode: 'yolo' });
+    await ctx.agent.planMode.enter('incomplete-design');
+
+    const specPath = ctx.agent.planMode.specDocuments?.spec;
+    if (specPath === undefined) throw new Error('expected specification path');
+    files.set(
+      specPath,
+      '# Specification\n\n## Goal\n\nAdd a spec coding workspace.\n\n## Constraints\n\nKeep documents project-local.\n\n## Acceptance Criteria\n\n- Require approval before execution.',
+    );
+
+    const exitPlanModeCall: ToolCall = {
+      type: 'function',
+      id: 'call_exit_incomplete_design',
+      name: 'ExitPlanMode',
+      arguments: '{}',
+    };
+    ctx.mockNextResponse(
+      { type: 'text', text: 'I will submit the design.' },
+      exitPlanModeCall,
+    );
+    ctx.mockNextResponse({ type: 'text', text: 'I need to complete the design.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+
+    await ctx.untilTurnEnd();
+    expect(ctx.agent.planMode.isActive).toBe(true);
+    expect(
+      ctx.allEvents.some((event) => event.type === '[rpc]' && event.event === 'requestApproval'),
+    ).toBe(false);
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Design is incomplete');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Tasks, Risks, Verification');
   });
 });
 

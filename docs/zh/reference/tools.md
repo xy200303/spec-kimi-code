@@ -66,7 +66,7 @@
 
 Plan 模式是一种受约束的工作状态：进入后 `Write` 与 `Edit` 只允许写入当前的计划文件，`TaskStop` 被完全拦截。其余工具（包括 `Bash`）仍按当前权限规则处理。
 
-启用 `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` 后，Plan 模式会改为在项目内的 `<workspace>/specs/<plan-id>/` 创建文档：`spec.md` 初始包含目标、约束和验收标准章节，`design.md` 保存提交审批的实现设计。`Write` 与 `Edit` 只允许修改这两份文档，因此它们可随项目一起审查和提交。必须填写完三个规格章节后才能请求审批；检查通过后，`ExitPlanMode` 才会展示 `design.md` 供用户审批。
+启用 `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` 后，Plan 模式会改为在项目内的 `<workspace>/specs/<plan-id>/` 创建文档：`spec.md` 初始包含目标、约束和验收标准章节，`design.md` 初始包含任务、风险和验证章节。`Write` 与 `Edit` 只允许修改这两份文档，因此它们可随项目一起审查和提交。必须填写完六个章节后才能请求审批；检查通过后，`ExitPlanMode` 才会展示 `design.md` 供用户审批。
 
 **`EnterPlanMode`** 不接受任何参数，进入成功后返回工作流指引及计划文件路径。启用 spec coding 后，返回项目内的规格与设计文件路径。
 

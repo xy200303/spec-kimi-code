@@ -98,7 +98,7 @@ function fullReminder(planFilePath: PlanFilePath, specFilePath: string | undefin
   const writeStep =
     specFilePath === undefined
       ? '4. Write Plan — modify the plan file with Write or Edit. Use Write if the plan file does not exist yet.'
-      : '4. Write Documents — update the specification with the goal, constraints, and acceptance criteria, then write the implementation design.';
+      : '4. Write Documents — update the specification with the goal, constraints, and acceptance criteria, then write the design with tasks, risks, and verification.';
   const body = `Plan mode is active. You MUST NOT make any edits (with the exception of ${writeTarget}) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
 
 Workflow:

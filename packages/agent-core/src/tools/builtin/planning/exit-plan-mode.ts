@@ -99,7 +99,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     args: ExitPlanModeInput,
   ): Promise<ToolInputDisplay | undefined> {
     if (!this.agent.planMode.isActive) return undefined;
-    if (!(await this.hasCompleteSpecification())) return undefined;
+    if (!(await this.hasCompletePlanningDocuments())) return undefined;
     let data: PlanData;
     try {
       data = await this.agent.planMode.data();
@@ -160,6 +160,8 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   private async resolvePlan(): Promise<ResolvePlanResult> {
     const specificationError = await this.resolveSpecification();
     if (specificationError !== undefined) return { ok: false, error: specificationError };
+    const designError = await this.resolveDesign();
+    if (designError !== undefined) return { ok: false, error: designError };
 
     let source: ExitPlanModePlanSource | null;
     try {
@@ -194,10 +196,16 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     };
   }
 
-  private async hasCompleteSpecification(): Promise<boolean> {
+  private async hasCompletePlanningDocuments(): Promise<boolean> {
     try {
-      const specification = await this.agent.planMode.specificationData();
-      return specification === null || specification.missingSections.length === 0;
+      const [specification, design] = await Promise.all([
+        this.agent.planMode.specificationData(),
+        this.agent.planMode.designData(),
+      ]);
+      return (
+        (specification === null || specification.missingSections.length === 0) &&
+        (design === null || design.missingSections.length === 0)
+      );
     } catch {
       return false;
     }
@@ -218,6 +226,24 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
       output:
         `Specification is incomplete. Complete ${specification.missingSections.join(', ')} in ` +
         `${specification.path} before requesting design approval.`,
+    };
+  }
+
+  private async resolveDesign(): Promise<ExecutableToolResult | undefined> {
+    let design;
+    try {
+      design = await this.agent.planMode.designData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to read design file.';
+      return { isError: true, output: `Failed to read design file: ${message}` };
+    }
+    if (design === null || design.missingSections.length === 0) return undefined;
+
+    return {
+      isError: true,
+      output:
+        `Design is incomplete. Complete ${design.missingSections.join(', ')} in ` +
+        `${design.path} before requesting approval.`,
     };
   }
 }
