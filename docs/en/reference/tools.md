@@ -81,7 +81,7 @@ When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, Plan mode instead create
 
 **`TodoList`** maintains a visible subtask list across multi-step operations; state is stored within the Agent session. The `todos` parameter accepts an array where each item has a `title` and `status` (`pending` / `in_progress` / `done`). Omitting `todos` queries the current list; passing an empty array clears it.
 
-When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, **`SpecTaskList`** keeps the structured task trace for the current spec run. Each task has a stable `id`, a reason, risk level, planned and changed file paths, and verification evidence. Omitting `tasks` queries the list; providing `tasks` replaces it with the current task trace.
+When `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` is enabled, **`SpecTaskList`** keeps the structured task trace for the current spec run. Each task has a stable `id`, a reason, risk level, planned and changed file paths, and verification evidence. Omitting `tasks` queries the list; providing `tasks` replaces it with the current task trace. Set `activeTaskId` before `Write`, `Edit`, `Bash`, `Agent`, or `AgentSwarm` calls to record those outcomes against the selected task; pass `null` to clear the selection.
 
 ## Collaboration Tools
 

@@ -8,6 +8,8 @@ import DESCRIPTION from './spec-task-list.md?raw';
 
 export const SPEC_TASK_LIST_TOOL_NAME = 'SpecTaskList' as const;
 export const SPEC_TASK_STORE_KEY = 'specTasks' as const;
+export const SPEC_TASK_ACTIVE_STORE_KEY = 'specTaskActive' as const;
+export const SPEC_TASK_TRACE_STORE_KEY = 'specTaskTraces' as const;
 
 export type SpecTaskStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
 export type SpecTaskRisk = 'low' | 'medium' | 'high';
@@ -23,9 +25,21 @@ export interface SpecTask {
   readonly evidence?: readonly string[];
 }
 
+export interface SpecTaskTrace {
+  readonly taskId: string;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly outcome: 'failed' | 'succeeded';
+  readonly changedPaths?: readonly string[];
+  readonly command?: string;
+  readonly delegation?: string;
+}
+
 declare module '../../store' {
   interface ToolStoreData {
     specTasks: readonly SpecTask[];
+    specTaskActive: string | null;
+    specTaskTraces: readonly SpecTaskTrace[];
   }
 }
 
@@ -54,6 +68,7 @@ const SpecTaskSchema = z.object({
 
 export interface SpecTaskListInput {
   tasks?: SpecTask[];
+  activeTaskId?: string | null;
 }
 
 export const SpecTaskListInputSchema: z.ZodType<SpecTaskListInput> = z
@@ -63,6 +78,12 @@ export const SpecTaskListInputSchema: z.ZodType<SpecTaskListInput> = z
       .refine(hasUniqueTaskIds, 'Task ids must be unique.')
       .optional()
       .describe('Full replacement task list. Omit to query the current task list.'),
+    activeTaskId: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,63}$/)
+      .nullable()
+      .optional()
+      .describe('Current task id for automatic change tracing. Pass null to clear it.'),
   })
   .strict();
 
@@ -74,18 +95,41 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
   constructor(private readonly store: ToolStore) {}
 
   resolveExecution(args: SpecTaskListInput): ToolExecution {
+    const isQuery = args.tasks === undefined && args.activeTaskId === undefined;
     return {
-      description: args.tasks === undefined ? 'Reading spec task list' : 'Updating spec task list',
+      description: isQuery ? 'Reading spec task list' : 'Updating spec task list',
       approvalRule: this.name,
       execute: async () => {
-        if (args.tasks === undefined) {
-          return { isError: false, output: renderSpecTasks(this.getTasks()) };
+        const tasks = args.tasks ?? this.getTasks();
+        if (args.tasks !== undefined) {
+          this.setTasks(tasks);
         }
 
-        this.setTasks(args.tasks);
+        let activeTaskId = this.getActiveTaskId();
+        if (
+          args.activeTaskId === undefined &&
+          activeTaskId !== null &&
+          !tasks.some((task) => task.id === activeTaskId)
+        ) {
+          this.setActiveTaskId(null);
+          activeTaskId = null;
+        }
+        if (args.activeTaskId !== undefined) {
+          if (args.activeTaskId !== null && !tasks.some((task) => task.id === args.activeTaskId)) {
+            return {
+              isError: true,
+              output: `Unknown spec task id: ${args.activeTaskId}`,
+            };
+          }
+          this.setActiveTaskId(args.activeTaskId);
+          activeTaskId = args.activeTaskId;
+        }
+
+        const output = renderSpecTasks(tasks, activeTaskId, this.getTraces());
+        if (isQuery) return { isError: false, output };
         return {
           isError: false,
-          output: `Spec task list updated.\n${renderSpecTasks(this.getTasks())}`,
+          output: `Spec task list updated.\n${output}`,
         };
       },
     };
@@ -98,14 +142,31 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
   private setTasks(tasks: readonly SpecTask[]): void {
     this.store.set(SPEC_TASK_STORE_KEY, tasks.map(copyTask));
   }
+
+  private getActiveTaskId(): string | null {
+    return this.store.get(SPEC_TASK_ACTIVE_STORE_KEY) ?? null;
+  }
+
+  private setActiveTaskId(taskId: string | null): void {
+    this.store.set(SPEC_TASK_ACTIVE_STORE_KEY, taskId);
+  }
+
+  private getTraces(): readonly SpecTaskTrace[] {
+    return this.store.get(SPEC_TASK_TRACE_STORE_KEY) ?? [];
+  }
 }
 
-export function renderSpecTasks(tasks: readonly SpecTask[]): string {
+export function renderSpecTasks(
+  tasks: readonly SpecTask[],
+  activeTaskId: string | null = null,
+  traces: readonly SpecTaskTrace[] = [],
+): string {
   if (tasks.length === 0) return 'Spec task list is empty.';
-  return ['Current spec tasks:', ...tasks.map(renderSpecTask)].join('\n');
+  const active = activeTaskId === null ? 'No active spec task.' : `Active spec task: ${activeTaskId}`;
+  return ['Current spec tasks:', active, ...tasks.map((task) => renderSpecTask(task, traces))].join('\n');
 }
 
-function renderSpecTask(task: SpecTask): string {
+function renderSpecTask(task: SpecTask, traces: readonly SpecTaskTrace[]): string {
   const lines = [
     `- [${task.status}] ${task.id}: ${task.title}`,
     `  Why: ${task.reason}`,
@@ -119,6 +180,14 @@ function renderSpecTask(task: SpecTask): string {
   }
   if (task.evidence !== undefined && task.evidence.length > 0) {
     lines.push(`  Evidence: ${task.evidence.join('; ')}`);
+  }
+  for (const trace of traces.filter((item) => item.taskId === task.id)) {
+    lines.push(`  Trace: [${trace.outcome}] ${trace.toolName} (${trace.toolCallId})`);
+    if (trace.changedPaths !== undefined && trace.changedPaths.length > 0) {
+      lines.push(`    Changed files: ${trace.changedPaths.join(', ')}`);
+    }
+    if (trace.command !== undefined) lines.push(`    Command: ${trace.command}`);
+    if (trace.delegation !== undefined) lines.push(`    Delegation: ${trace.delegation}`);
   }
   return lines.join('\n');
 }

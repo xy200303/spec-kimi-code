@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SPEC_TASK_ACTIVE_STORE_KEY,
   SPEC_TASK_LIST_TOOL_NAME,
   SPEC_TASK_STORE_KEY,
+  SPEC_TASK_TRACE_STORE_KEY,
   SpecTaskListInputSchema,
   SpecTaskListTool,
   type SpecTask,
+  type SpecTaskTrace,
 } from '../../src/tools/builtin/state/spec-task-list';
 import type { ToolStore } from '../../src/tools/store';
 import { executeTool } from './fixtures/execute-tool';
@@ -15,17 +18,38 @@ const signal = new AbortController().signal;
 function makeTool(initial: readonly SpecTask[] = []): {
   tool: SpecTaskListTool;
   getTasks(): readonly SpecTask[];
+  setTraces(traces: readonly SpecTaskTrace[]): void;
 } {
   let tasks = [...initial];
+  let activeTaskId: string | null = null;
+  let traces: readonly SpecTaskTrace[] = [];
   const store: ToolStore = {
-    get: (key) => (key === SPEC_TASK_STORE_KEY ? tasks : undefined),
+    get: (key) => {
+      const value =
+        key === SPEC_TASK_STORE_KEY
+          ? tasks
+          : key === SPEC_TASK_TRACE_STORE_KEY
+            ? traces
+            : key === SPEC_TASK_ACTIVE_STORE_KEY
+              ? activeTaskId
+              : undefined;
+      return value as never;
+    },
     set: (key, value) => {
       if (key === SPEC_TASK_STORE_KEY) {
         tasks = [...(value as readonly SpecTask[])];
+      } else if (key === SPEC_TASK_TRACE_STORE_KEY) {
+        traces = [...(value as readonly SpecTaskTrace[])];
+      } else if (key === SPEC_TASK_ACTIVE_STORE_KEY) {
+        activeTaskId = value as string | null;
       }
     },
   };
-  return { tool: new SpecTaskListTool(store), getTasks: () => tasks };
+  return {
+    tool: new SpecTaskListTool(store),
+    getTasks: () => tasks,
+    setTraces: (traces) => store.set(SPEC_TASK_TRACE_STORE_KEY, traces),
+  };
 }
 
 describe('SpecTaskListTool', () => {
@@ -35,6 +59,9 @@ describe('SpecTaskListTool', () => {
     expect(SPEC_TASK_LIST_TOOL_NAME).toBe('SpecTaskList');
     expect(SPEC_TASK_STORE_KEY).toBe('specTasks');
     expect(SpecTaskListInputSchema.safeParse({}).success).toBe(true);
+    expect(
+      SpecTaskListInputSchema.safeParse({ activeTaskId: 'task-validate-input' }).success,
+    ).toBe(true);
     expect(
       SpecTaskListInputSchema.safeParse({
         tasks: [
@@ -122,5 +149,70 @@ describe('SpecTaskListTool', () => {
         evidence: ['docs build'],
       },
     ]);
+  });
+
+  it('sets and renders the active task for automatic tracing', async () => {
+    const { tool } = makeTool();
+    const tasks: SpecTask[] = [
+      {
+        id: 'task-track-changes',
+        title: 'Track changes',
+        status: 'in_progress',
+        reason: 'Keep the delivery record auditable.',
+      },
+    ];
+
+    const update = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call_update',
+      args: { tasks, activeTaskId: 'task-track-changes' },
+      signal,
+    });
+    const query = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call_query',
+      args: {},
+      signal,
+    });
+
+    expect(update).toMatchObject({ isError: false });
+    expect(query.output).toContain('Active spec task: task-track-changes');
+  });
+
+  it('renders tracked command and file-change details', async () => {
+    const { tool, setTraces } = makeTool();
+    const task: SpecTask = {
+      id: 'task-trace',
+      title: 'Trace changes',
+      status: 'done',
+      reason: 'Keep the audit record useful.',
+    };
+    const update = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call_update',
+      args: { tasks: [task], activeTaskId: 'task-trace' },
+      signal,
+    });
+    expect(update).toMatchObject({ isError: false });
+
+    setTraces([
+      {
+        taskId: 'task-trace',
+        toolCallId: 'call_write',
+        toolName: 'Write',
+        outcome: 'succeeded',
+        changedPaths: ['src/example.ts'],
+        command: 'pnpm test',
+      },
+    ]);
+    const query = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call_query',
+      args: {},
+      signal,
+    });
+
+    expect(query.output).toContain('Changed files: src/example.ts');
+    expect(query.output).toContain('Command: pnpm test');
   });
 });
