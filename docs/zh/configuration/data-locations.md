@@ -78,7 +78,7 @@ $KIMI_CODE_HOME  （默认 ~/.kimi-code）
 - **`upcoming-goals.json`**：由 `/goal next <objective>` 创建的 TUI 专属队列。它不属于 Agent 对话；只有当前目标完成并提升后续目标后，才会进入 Agent 对话。
 - **`agents/main/wire.jsonl`**：主 Agent 的完整通信记录，用于会话恢复和回放。
 - **`agents/main/plans/`**：Plan 模式下写入的计划文件，按计划 id 命名（`<id>.md`）。
-- **`<workspace>/specs/<plan-id>/`**：启用 `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` 后，Plan 模式在项目内写入的文档。`spec.md` 保存规格，`design.md` 保存实现设计，`delivery.md` 保存交付证据；该目录不在 `KIMI_CODE_HOME` 下，因此可以随项目提交。
+- **`<workspace>/specs/<plan-id>/`**：启用 `KIMI_CODE_EXPERIMENTAL_SPEC_CODING=1` 后，Plan 模式在项目内写入的文档。`spec.md` 保存规格，`design.md` 保存实现设计，`delivery.md` 保存交付证据，`delivery.json` 保存相同的机器可读交接信息；该目录不在 `KIMI_CODE_HOME` 下，因此可以随项目提交。
 - **`agents/agent-0/` 等**：子 Agent 实例目录，各自含 `wire.jsonl`。
 - **`logs/kimi-code.log`**：该会话的诊断日志，只有发生诊断事件时才存在。
 - **`tasks/`**：后台任务持久化——`tasks/<task_id>.json` 保存状态/pid/退出码，`tasks/<task_id>/output.log` 保存输出。

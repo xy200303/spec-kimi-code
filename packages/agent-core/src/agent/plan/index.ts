@@ -28,6 +28,7 @@ export interface SpecDocumentPaths {
   readonly spec: string;
   readonly design: string;
   readonly delivery: string;
+  readonly deliveryJson: string;
 }
 
 export const REQUIRED_SPECIFICATION_SECTIONS = [
@@ -404,6 +405,7 @@ export class PlanMode {
       spec: join(root, 'spec.md'),
       design: join(root, 'design.md'),
       delivery: join(root, 'delivery.md'),
+      deliveryJson: join(root, 'delivery.json'),
     };
   }
 }

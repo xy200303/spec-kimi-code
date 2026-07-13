@@ -224,6 +224,24 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('Risk: medium');
     expect(files.get(context.delivery)).toContain('Tool calls: Bash (call-test)');
     expect(files.get(context.delivery)).toContain('[succeeded] pnpm test delivery');
+    expect(JSON.parse(files.get(context.deliveryJson) ?? '{}')).toMatchObject({
+      schemaVersion: 1,
+      status: 'draft',
+      documents: {
+        deliveryMarkdown: context.delivery,
+        deliveryJson: context.deliveryJson,
+      },
+      goal: 'Create a traceable delivery record.',
+      changes: [
+        {
+          path: 'src/delivery.ts',
+          taskId: 'task-delivery',
+          reason: 'Provide an auditable handoff.',
+          risk: 'medium',
+          toolCallIds: ['call-test'],
+        },
+      ],
+    });
   });
 
   it('rejects completion when tasks or quality evidence are incomplete', async () => {
@@ -389,8 +407,11 @@ describe('SpecDeliveryTool', () => {
     });
 
     expect(result).toMatchObject({ isError: false });
-    expect(result.output).toContain('Completed delivery record');
+    expect(result.output).toContain('Completed delivery records');
     expect(files.get(context.delivery)).toContain('## Status\n\nComplete');
+    expect(JSON.parse(files.get(context.deliveryJson) ?? '{}')).toMatchObject({
+      status: 'complete',
+    });
     expect(files.get(context.delivery)).toContain('[x] Diff review: Reviewed the final diff.');
     expect(files.get(context.delivery)).toContain('tool call call-diff; git diff --check');
   });

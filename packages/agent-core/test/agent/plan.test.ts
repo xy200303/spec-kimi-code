@@ -107,6 +107,7 @@ describe('manual plan entry', () => {
       spec: '/workspace/specs/project-documents/spec.md',
       design: '/workspace/specs/project-documents/design.md',
       delivery: '/workspace/specs/project-documents/delivery.md',
+      deliveryJson: '/workspace/specs/project-documents/delivery.json',
     });
     expect(ctx.agent.planMode.writableFilePaths).toEqual([
       '/workspace/specs/project-documents/spec.md',

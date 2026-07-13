@@ -64,6 +64,7 @@ export interface SpecDeliveryContext {
   readonly spec: string;
   readonly design: string;
   readonly delivery: string;
+  readonly deliveryJson: string;
   readonly qualityGate: SpecQualityGate;
   readonly strategy?: SpecStrategyDecision;
   readonly approved?: SpecApprovedSnapshot;
@@ -170,7 +171,10 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
   resolveExecution(args: SpecDeliveryInput): ToolExecution {
     const context = this.context();
     return {
-      accesses: context === null ? undefined : ToolAccesses.writeFile(context.delivery),
+      accesses:
+        context === null
+          ? undefined
+          : [...ToolAccesses.writeFile(context.delivery), ...ToolAccesses.writeFile(context.deliveryJson)],
       description:
         args.complete === true ? 'Completing spec delivery record' : 'Writing spec delivery record',
       approvalRule: this.name,
@@ -235,14 +239,29 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       rollbackNotes: args.rollbackNotes ?? [],
       complete: args.complete === true,
     });
+    const manifest = renderDeliveryManifest({
+      context,
+      ...documents,
+      tasks,
+      traces,
+      evidence,
+      decisions: args.decisions ?? [],
+      risks: args.risks ?? [],
+      openQuestions: args.openQuestions ?? [],
+      rollbackNotes: args.rollbackNotes ?? [],
+      complete: args.complete === true,
+    });
     try {
-      await this.agent.kaos.writeText(context.delivery, content);
+      await Promise.all([
+        this.agent.kaos.writeText(context.delivery, content),
+        this.agent.kaos.writeText(context.deliveryJson, manifest),
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { isError: true, output: `Failed to write delivery record: ${message}` };
     }
     return {
-      output: `${args.complete === true ? 'Completed' : 'Updated'} delivery record: ${context.delivery}`,
+      output: `${args.complete === true ? 'Completed' : 'Updated'} delivery records: ${context.delivery}, ${context.deliveryJson}`,
     };
   }
 
@@ -335,6 +354,16 @@ interface DeliveryRecordInput {
   readonly complete: boolean;
 }
 
+interface DeliveryChangeRecord {
+  readonly path: string;
+  readonly taskId: string;
+  readonly taskTitle: string;
+  readonly reason: string;
+  readonly risk?: SpecTask['risk'];
+  readonly category?: SpecTask['category'];
+  readonly toolCallIds: readonly string[];
+}
+
 function renderDeliveryRecord(input: DeliveryRecordInput): string {
   const designRisks = markdownSection(input.design, 'Risks');
   return `# Delivery Record
@@ -404,6 +433,39 @@ ${renderList(input.rollbackNotes, 'No rollback notes recorded.')}
 `;
 }
 
+function renderDeliveryManifest(input: DeliveryRecordInput): string {
+  const plannedRisks = markdownSection(input.design, 'Risks');
+  return `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      status: input.complete ? 'complete' : 'draft',
+      documents: {
+        specification: input.context.spec,
+        design: input.context.design,
+        deliveryMarkdown: input.context.delivery,
+        deliveryJson: input.context.deliveryJson,
+      },
+      qualityGate: input.context.qualityGate,
+      strategy: input.context.strategy,
+      approval: input.context.approved?.approval,
+      goal: markdownSection(input.specification, 'Goal'),
+      constraints: markdownSection(input.specification, 'Constraints'),
+      acceptanceCriteria: markdownSection(input.specification, 'Acceptance Criteria'),
+      plan: markdownSection(input.design, 'Tasks'),
+      plannedRisks,
+      tasks: input.tasks,
+      changes: collectChanges(input.tasks, input.traces),
+      evidence: input.evidence,
+      decisions: input.decisions,
+      residualRisks: input.risks,
+      openQuestions: input.openQuestions,
+      rollbackNotes: input.rollbackNotes,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 export function markdownSection(content: string, title: string): string {
   const lines = content.split(/\r?\n/);
   const headingIndex = lines.findIndex((line) => line.trim() === `## ${title}`);
@@ -462,11 +524,36 @@ function renderChanges(
   tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
 ): string {
-  const entries = tasks.flatMap((task) => changeEntriesForTask(task, traces));
-  return entries.length === 0 ? 'No file changes recorded.' : entries.join('\n');
+  const changes = collectChanges(tasks, traces);
+  return changes.length === 0
+    ? 'No file changes recorded.'
+    : changes
+        .map((change) =>
+          [
+            `- \`${change.path}\``,
+            `  Task: ${change.taskId} — ${change.taskTitle}`,
+            `  Reason: ${change.reason}`,
+            ...(change.risk === undefined ? [] : [`  Risk: ${change.risk}`]),
+            ...(change.category === undefined ? [] : [`  Category: ${change.category}`]),
+            ...(change.toolCallIds.length === 0
+              ? []
+              : [`  Tool calls: ${change.toolCallIds.join(', ')}`]),
+          ].join('\n'),
+        )
+        .join('\n');
 }
 
-function changeEntriesForTask(task: SpecTask, traces: readonly SpecTaskTrace[]): readonly string[] {
+function collectChanges(
+  tasks: readonly SpecTask[],
+  traces: readonly SpecTaskTrace[],
+): readonly DeliveryChangeRecord[] {
+  return tasks.flatMap((task) => changesForTask(task, traces));
+}
+
+function changesForTask(
+  task: SpecTask,
+  traces: readonly SpecTaskTrace[],
+): readonly DeliveryChangeRecord[] {
   const taskTraces = traces.filter((trace) => trace.taskId === task.id);
   const paths = [
     ...new Set([
@@ -475,16 +562,15 @@ function changeEntriesForTask(task: SpecTask, traces: readonly SpecTaskTrace[]):
     ]),
   ];
   const toolCalls = taskTraces.map((trace) => `${trace.toolName} (${trace.toolCallId})`);
-  return paths.map((path) =>
-    [
-      `- \`${path}\``,
-      `  Task: ${task.id} — ${task.title}`,
-      `  Reason: ${task.reason}`,
-      ...(task.risk === undefined ? [] : [`  Risk: ${task.risk}`]),
-      ...(task.category === undefined ? [] : [`  Category: ${task.category}`]),
-      ...(toolCalls.length === 0 ? [] : [`  Tool calls: ${toolCalls.join(', ')}`]),
-    ].join('\n'),
-  );
+  return paths.map((path) => ({
+    path,
+    taskId: task.id,
+    taskTitle: task.title,
+    reason: task.reason,
+    risk: task.risk,
+    category: task.category,
+    toolCallIds: toolCalls,
+  }));
 }
 
 function renderEvidence(
@@ -536,6 +622,7 @@ export function isSpecDeliveryContext(value: unknown): value is SpecDeliveryCont
     typeof context['spec'] === 'string' &&
     typeof context['design'] === 'string' &&
     typeof context['delivery'] === 'string' &&
+    typeof context['deliveryJson'] === 'string' &&
     (context['approved'] === undefined || isSpecApprovedSnapshot(context['approved'])) &&
     (context['strategy'] === undefined || isSpecStrategyDecision(context['strategy'])) &&
     (context['qualityGate'] === 'fast' ||
