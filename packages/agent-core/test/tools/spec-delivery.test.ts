@@ -202,6 +202,9 @@ describe('SpecDeliveryTool', () => {
     });
 
     expect(result).toMatchObject({ isError: false });
+    expect(result.output).toContain(
+      'Task progress: pending=0, in_progress=1, done=0, blocked=0',
+    );
     expect(result.output).toContain('Current tasks:\n- [in_progress] task-implement');
   });
 

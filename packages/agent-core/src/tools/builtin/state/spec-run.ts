@@ -93,6 +93,7 @@ Approval source: ${approved.approval?.source ?? 'Not recorded'}
 Approved at: ${approved.approval?.approvedAt ?? 'Not recorded'}
 Selected option: ${approved.approval?.selectedOption ?? 'Not selected'}
 Delivery finalization: ${context.finalizedAt ?? 'Not finalized'}
+Task progress: ${renderTaskProgress(tasks)}
 ${drift}
 
 Goal:
@@ -120,6 +121,17 @@ ${markdownSection(design, 'Verification') || 'Not recorded.'}`;
 function renderCurrentTasks(tasks: readonly SpecTask[]): string {
   if (tasks.length === 0) return 'No spec tasks recorded.';
   return tasks.map((task) => `- [${task.status}] ${task.id}: ${task.title}`).join('\n');
+}
+
+function renderTaskProgress(tasks: readonly SpecTask[]): string {
+  const counts: Record<SpecTask['status'], number> = {
+    pending: 0,
+    in_progress: 0,
+    done: 0,
+    blocked: 0,
+  };
+  for (const task of tasks) counts[task.status] += 1;
+  return `pending=${counts.pending}, in_progress=${counts.in_progress}, done=${counts.done}, blocked=${counts.blocked}`;
 }
 
 function isSpecTask(value: unknown): value is SpecTask {
