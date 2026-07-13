@@ -1,0 +1,17 @@
+{
+  "name": "@moonshot-ai/kimi-vscode",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "vscode": "^1.95.0" },
+  "main": "./dist/extension.js",
+  "activationEvents": ["onView:kimiSpecRuns", "onCommand:kimiSpec.openLatestRun"],
+  "contributes": {
+    "commands": [
+      { "command": "kimiSpec.openLatestRun", "title": "Kimi: Open Latest Spec Run" }
+    ],
+    "views": { "explorer": [{ "id": "kimiSpecRuns", "name": "Kimi Spec Runs" }] }
+  },
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "devDependencies": { "@types/vscode": "^1.95.0", "typescript": "^6.0.2" }
+}
