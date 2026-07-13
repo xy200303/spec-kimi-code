@@ -34,9 +34,16 @@ export interface SpecStrategyDecision {
   readonly reasons: readonly string[];
 }
 
+export interface SpecApprovalRecord {
+  readonly source: 'auto' | 'user';
+  readonly approvedAt: string;
+  readonly selectedOption?: string;
+}
+
 export interface SpecApprovedSnapshot {
   readonly specification: string;
   readonly design: string;
+  readonly approval?: SpecApprovalRecord;
 }
 
 export type SpecEvidenceKind =
@@ -177,6 +184,13 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
         output: 'No spec delivery record is available. Enter spec plan mode before creating a delivery record.',
       };
     }
+    const approved = context.approved;
+    if (approved?.approval === undefined) {
+      return {
+        isError: true,
+        output: 'No approved spec run is available. Complete and approve spec plan mode first.',
+      };
+    }
 
     const tasks = this.tasks();
     const traces = this.traces();
@@ -197,10 +211,7 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
       };
     }
 
-    const documents = await this.documents(context);
-    if (documents instanceof Error) {
-      return { isError: true, output: `Failed to read spec documents: ${documents.message}` };
-    }
+    const documents = approved;
 
     const content = renderDeliveryRecord({
       context,
@@ -240,20 +251,6 @@ export class SpecDeliveryTool implements BuiltinTool<SpecDeliveryInput> {
     return Array.isArray(value) ? value.filter(isSpecTaskTrace) : [];
   }
 
-  private async documents(
-    context: SpecDeliveryContext,
-  ): Promise<SpecApprovedSnapshot | Error> {
-    if (context.approved !== undefined) return context.approved;
-    try {
-      const [specification, design] = await Promise.all([
-        this.agent.kaos.readText(context.spec),
-        this.agent.kaos.readText(context.design),
-      ]);
-      return { specification, design };
-    } catch (error) {
-      return error instanceof Error ? error : new Error(String(error));
-    }
-  }
 }
 
 function missingEvidenceKinds(
@@ -325,6 +322,10 @@ ${input.context.qualityGate}
 ## Development Strategy
 
 ${renderStrategy(input.context.strategy)}
+
+## Approval
+
+${renderApproval(input.context.approved?.approval)}
 
 ## Status
 
@@ -422,6 +423,15 @@ function renderStrategy(strategy: SpecStrategyDecision | undefined): string {
   ].join('\n');
 }
 
+function renderApproval(approval: SpecApprovalRecord | undefined): string {
+  if (approval === undefined) return 'Not recorded.';
+  return [
+    `Source: ${approval.source}`,
+    `Approved at: ${approval.approvedAt}`,
+    ...(approval.selectedOption === undefined ? [] : [`Selected option: ${approval.selectedOption}`]),
+  ].join('\n');
+}
+
 function changedPaths(
   tasks: readonly SpecTask[],
   traces: readonly SpecTaskTrace[],
@@ -495,7 +505,21 @@ export function isSpecDeliveryContext(value: unknown): value is SpecDeliveryCont
 function isSpecApprovedSnapshot(value: unknown): value is SpecApprovedSnapshot {
   if (value === null || typeof value !== 'object') return false;
   const snapshot = value as Record<string, unknown>;
-  return typeof snapshot['specification'] === 'string' && typeof snapshot['design'] === 'string';
+  return (
+    typeof snapshot['specification'] === 'string' &&
+    typeof snapshot['design'] === 'string' &&
+    (snapshot['approval'] === undefined || isSpecApprovalRecord(snapshot['approval']))
+  );
+}
+
+function isSpecApprovalRecord(value: unknown): value is SpecApprovalRecord {
+  if (value === null || typeof value !== 'object') return false;
+  const approval = value as Record<string, unknown>;
+  return (
+    (approval['source'] === 'auto' || approval['source'] === 'user') &&
+    typeof approval['approvedAt'] === 'string' &&
+    (approval['selectedOption'] === undefined || typeof approval['selectedOption'] === 'string')
+  );
 }
 
 function isSpecStrategyDecision(value: unknown): value is SpecStrategyDecision {

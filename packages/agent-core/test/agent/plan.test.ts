@@ -374,6 +374,10 @@ describe('spec coding approval', () => {
       approved: {
         specification: expect.stringContaining('Add a delivery record.'),
         design: expect.stringContaining('Add the template.'),
+        approval: {
+          source: 'auto',
+          approvedAt: expect.any(String),
+        },
       },
       strategy: {
         strategy: 'controlled_feature',
@@ -412,7 +416,8 @@ describe('spec coding approval', () => {
       type: 'function',
       id: 'call_exit_manual_delivery_record',
       name: 'ExitPlanMode',
-      arguments: '{}',
+      arguments:
+        '{"options":[{"label":"Focused approach","description":"Implement the smallest approved scope."},{"label":"Expanded approach","description":"Implement the broader alternative."}]}',
     };
     ctx.mockNextResponse(
       { type: 'text', text: 'I will submit the design.' },
@@ -422,13 +427,22 @@ describe('spec coding approval', () => {
     await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
 
     const approval = await ctx.takeApprovalRequest();
-    approval.respond({ decision: 'approved' });
+    approval.respond({ decision: 'approved', selectedLabel: 'Focused approach' });
     await ctx.untilTurnEnd();
 
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
+    expect(ctx.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]).toMatchObject({
+      approved: {
+        approval: {
+          source: 'user',
+          approvedAt: expect.any(String),
+          selectedOption: 'Focused approach',
+        },
+      },
+    });
   });
 });
 

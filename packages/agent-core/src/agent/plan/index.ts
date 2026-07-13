@@ -3,6 +3,7 @@ import { dirname, join } from 'pathe';
 
 import type { Agent } from '..';
 import {
+  isSpecDeliveryContext,
   SPEC_DELIVERY_STORE_KEY,
   type SpecDeliveryContext,
   type SpecStrategyDecision,
@@ -84,6 +85,8 @@ function deliveryTemplate(qualityGate: SpecQualityGate): string {
 ${qualityGate}
 
 ## Development Strategy
+
+## Approval
 
 ## Goal
 
@@ -291,6 +294,24 @@ export class PlanMode {
       strategy: undefined,
       approved: undefined,
     } satisfies SpecDeliveryContext);
+  }
+
+  approveSpecRun(source: 'auto' | 'user', selectedOption?: string): boolean {
+    if (this._specDocuments === null) return true;
+    const context = this.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY];
+    if (!isSpecDeliveryContext(context) || context.approved === undefined) return false;
+    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      approved: {
+        ...context.approved,
+        approval: {
+          source,
+          approvedAt: new Date().toISOString(),
+          selectedOption,
+        },
+      },
+    } satisfies SpecDeliveryContext);
+    return true;
   }
 
   get writableFilePaths(): readonly string[] {

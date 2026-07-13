@@ -52,6 +52,16 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const qualityGate = this.agent.planMode.qualityGate;
     const strategy = this.agent.planMode.strategy;
+    if (this.agent.planMode.approveSpecRun?.('user', selected?.label) === false) {
+      return {
+        kind: 'result' as const,
+        syntheticResult: {
+          isError: true,
+          output:
+            'Failed to finalize the approved spec run. Re-read the specification and design, then retry ExitPlanMode.',
+        },
+      };
+    }
     const failed = this.exitPlanMode();
     if (failed !== undefined) {
       return { kind: 'result' as const, syntheticResult: failed };

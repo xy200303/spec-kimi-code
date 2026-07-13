@@ -18,7 +18,7 @@ import { createFakeKaos } from './fixtures/fake-kaos';
 import { executeTool } from './fixtures/execute-tool';
 import { testAgent } from '../agent/harness/agent';
 
-// Scenarios: approved-run snapshots, evidence validation, delivery drafts, and completions.
+// Scenarios: approved-run snapshots, approval evidence, delivery drafts, and completions.
 // Wiring: real agent state and an in-memory Kaos filesystem.
 // Run: vitest spec-delivery.test.ts.
 const signal = new AbortController().signal;
@@ -55,12 +55,24 @@ async function createRig() {
     context.design,
     '# Design\n\n## Tasks\n\n- Generate a delivery record.\n\n## Risks\n\n- Evidence may be incomplete.\n\n## Verification\n\n- Run focused tests.',
   );
+  const approvedContext: SpecDeliveryContext = {
+    ...context,
+    approved: {
+      specification: files.get(context.spec)!,
+      design: files.get(context.design)!,
+      approval: {
+        source: 'auto',
+        approvedAt: '2026-07-13T00:00:00.000Z',
+      },
+    },
+  };
+  ctx.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, approvedContext);
   const store: ToolStore = {
     get: (key) => ctx.agent.tools.storeData()[key] as never,
     set: (key, value) => ctx.agent.tools.updateStore(key, value),
   };
   return {
-    context,
+    context: approvedContext,
     files,
     store,
     tool: new SpecDeliveryTool(ctx.agent, store),
@@ -89,14 +101,7 @@ describe('SpecDeliveryTool', () => {
   });
 
   it('returns the approved goal when source documents change', async () => {
-    const { context, files, store, specRun } = await createRig();
-    store.set(SPEC_DELIVERY_STORE_KEY, {
-      ...context,
-      approved: {
-        specification: files.get(context.spec)!,
-        design: files.get(context.design)!,
-      },
-    });
+    const { context, files, specRun } = await createRig();
     files.set(context.spec, '# Specification\n\n## Goal\n\nChanged after approval.');
 
     const result = await executeTool(specRun, {
@@ -109,6 +114,52 @@ describe('SpecDeliveryTool', () => {
     expect(result).toMatchObject({ isError: false });
     expect(result.output).toContain('Create a traceable delivery record.');
     expect(result.output).not.toContain('Changed after approval.');
+  });
+
+  it('rejects the run query when approval has not been finalized', async () => {
+    const { context, store, specRun } = await createRig();
+    const snapshot = context.approved;
+    if (snapshot === undefined) throw new Error('expected an approved snapshot');
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      approved: {
+        ...snapshot,
+        approval: undefined,
+      },
+    });
+
+    const result = await executeTool(specRun, {
+      turnId: 't1',
+      toolCallId: 'call-pending-spec-run',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('No approved spec run is available');
+  });
+
+  it('rejects a delivery update when approval has not been finalized', async () => {
+    const { context, store, tool } = await createRig();
+    const snapshot = context.approved;
+    if (snapshot === undefined) throw new Error('expected an approved snapshot');
+    store.set(SPEC_DELIVERY_STORE_KEY, {
+      ...context,
+      approved: {
+        ...snapshot,
+        approval: undefined,
+      },
+    });
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-pending-delivery',
+      args: {},
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('No approved spec run is available');
   });
 
   it('writes a structured draft when the run has tracked work', async () => {
@@ -125,10 +176,6 @@ describe('SpecDeliveryTool', () => {
     store.set(SPEC_TASK_STORE_KEY, tasks);
     store.set(SPEC_DELIVERY_STORE_KEY, {
       ...context,
-      approved: {
-        specification: files.get(context.spec)!,
-        design: files.get(context.design)!,
-      },
       strategy: {
         strategy: 'bug_diagnosis',
         recommendedQualityGate: 'strict',
@@ -164,6 +211,7 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('## Status\n\nDraft');
     expect(files.get(context.delivery)).toContain('Create a traceable delivery record.');
     expect(files.get(context.delivery)).toContain('## Acceptance Criteria\n\n- Include evidence.');
+    expect(files.get(context.delivery)).toContain('## Approval\n\nSource: auto');
     expect(files.get(context.delivery)).toContain('[done] task-delivery');
     expect(files.get(context.delivery)).toContain('Selected: bug_diagnosis');
     expect(files.get(context.delivery)).toContain('Recommended quality gate: strict');

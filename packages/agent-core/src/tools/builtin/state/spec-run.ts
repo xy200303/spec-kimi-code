@@ -30,7 +30,7 @@ export class SpecRunTool implements BuiltinTool<SpecRunInput> {
       approvalRule: this.name,
       execute: async () => {
         const context = this.store.get(SPEC_DELIVERY_STORE_KEY);
-        if (!isSpecDeliveryContext(context) || context.approved === undefined) {
+        if (!isSpecDeliveryContext(context) || context.approved?.approval === undefined) {
           return {
             isError: true,
             output: 'No approved spec run is available. Complete and approve spec plan mode first.',
@@ -49,6 +49,9 @@ function renderSpecRun(context: SpecDeliveryContext): string {
   return `Approved spec run
 Quality gate: ${context.qualityGate}
 Strategy: ${context.strategy?.strategy ?? 'Not routed'}
+Approval source: ${approved.approval?.source ?? 'Not recorded'}
+Approved at: ${approved.approval?.approvedAt ?? 'Not recorded'}
+Selected option: ${approved.approval?.selectedOption ?? 'Not selected'}
 
 Goal:
 ${markdownSection(specification, 'Goal') || 'Not recorded.'}
