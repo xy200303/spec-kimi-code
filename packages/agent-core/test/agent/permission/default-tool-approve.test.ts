@@ -43,6 +43,10 @@ describe('DefaultToolApprovePermissionPolicy', () => {
     expect(policy.evaluate(policyContext('CronList', {}))).toEqual({ kind: 'approve' });
   });
 
+  it('auto-approves SpecTaskList', () => {
+    expect(policy.evaluate(policyContext('SpecTaskList', {}))).toEqual({ kind: 'approve' });
+  });
+
   it('does not approve CronCreate', () => {
     expect(
       policy.evaluate(policyContext('CronCreate', { cron: '*/5 * * * *', prompt: 'ping' })),

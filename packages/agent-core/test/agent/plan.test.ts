@@ -101,6 +101,8 @@ describe('manual plan entry', () => {
       '/workspace/specs/project-documents/delivery.md',
       expect.stringContaining('## Quality Gate\n\nstandard'),
     );
+    ctx.configure({ tools: ['SpecTaskList'] });
+    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecTaskList')).toBe(true);
   });
 
   it('enters plan mode through the EnterPlanMode tool and reminds the next step', async () => {
