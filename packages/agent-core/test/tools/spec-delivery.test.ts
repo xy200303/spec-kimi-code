@@ -115,6 +115,7 @@ describe('SpecDeliveryTool', () => {
     expect(result).toMatchObject({ isError: false });
     expect(result.output).toContain('Create a traceable delivery record.');
     expect(result.output).not.toContain('Changed after approval.');
+    expect(result.output).toContain('Evidence may be incomplete.');
     expect(result.output).toContain(`Spec document drift: detected in ${context.spec}.`);
   });
 

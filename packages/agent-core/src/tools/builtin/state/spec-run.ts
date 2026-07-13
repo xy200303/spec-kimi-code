@@ -92,6 +92,9 @@ ${markdownSection(specification, 'Acceptance Criteria') || 'Not recorded.'}
 Plan:
 ${markdownSection(design, 'Tasks') || 'Not recorded.'}
 
+Risks:
+${markdownSection(design, 'Risks') || 'Not recorded.'}
+
 Verification:
 ${markdownSection(design, 'Verification') || 'Not recorded.'}`;
 }
