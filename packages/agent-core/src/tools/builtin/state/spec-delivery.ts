@@ -406,6 +406,10 @@ ${markdownSection(input.design, 'Tasks') || 'Not recorded.'}
 
 ${renderTasks(input.tasks)}
 
+## Activity
+
+${renderActivity(input.tasks, input.traces)}
+
 ## Changes
 
 ${renderChanges(input.tasks, input.traces)}
@@ -454,6 +458,7 @@ function renderDeliveryManifest(input: DeliveryRecordInput): string {
       plan: markdownSection(input.design, 'Tasks'),
       plannedRisks,
       tasks: input.tasks,
+      activity: input.traces,
       changes: collectChanges(input.tasks, input.traces),
       evidence: input.evidence,
       decisions: input.decisions,
@@ -541,6 +546,26 @@ function renderChanges(
           ].join('\n'),
         )
         .join('\n');
+}
+
+function renderActivity(tasks: readonly SpecTask[], traces: readonly SpecTaskTrace[]): string {
+  if (traces.length === 0) return 'No tool activity recorded.';
+  const taskTitles = new Map(tasks.map((task) => [task.id, task.title]));
+  return traces
+    .map((trace) => {
+      const lines = [
+        `- [${trace.outcome}] ${trace.toolName} (${trace.toolCallId})`,
+        `  Task: ${trace.taskId}${taskTitles.has(trace.taskId) ? ` — ${taskTitles.get(trace.taskId)}` : ''}`,
+      ];
+      if (trace.command !== undefined) lines.push(`  Command: ${trace.command}`);
+      if (trace.delegation !== undefined) lines.push(`  Delegation: ${trace.delegation}`);
+      if (trace.changedPaths !== undefined && trace.changedPaths.length > 0) {
+        lines.push(`  Changed files: ${trace.changedPaths.join(', ')}`);
+      }
+      if (trace.background === true) lines.push('  Background: true');
+      return lines.join('\n');
+    })
+    .join('\n');
 }
 
 function collectChanges(

@@ -194,6 +194,13 @@ describe('SpecDeliveryTool', () => {
         outcome: 'succeeded',
         command: 'pnpm test delivery',
       },
+      {
+        taskId: 'task-delivery',
+        toolCallId: 'call-review',
+        toolName: 'Agent',
+        outcome: 'succeeded',
+        delegation: 'Review the delivery evidence.',
+      },
     ]);
 
     const result = await executeTool(tool, {
@@ -223,6 +230,9 @@ describe('SpecDeliveryTool', () => {
     expect(files.get(context.delivery)).toContain('Reason: Provide an auditable handoff.');
     expect(files.get(context.delivery)).toContain('Risk: medium');
     expect(files.get(context.delivery)).toContain('Tool calls: Bash (call-test)');
+    expect(files.get(context.delivery)).toContain('## Activity\n\n- [succeeded] Bash (call-test)');
+    expect(files.get(context.delivery)).toContain('Command: pnpm test delivery');
+    expect(files.get(context.delivery)).toContain('Delegation: Review the delivery evidence.');
     expect(files.get(context.delivery)).toContain('[succeeded] pnpm test delivery');
     expect(JSON.parse(files.get(context.deliveryJson) ?? '{}')).toMatchObject({
       schemaVersion: 1,
@@ -239,6 +249,13 @@ describe('SpecDeliveryTool', () => {
           reason: 'Provide an auditable handoff.',
           risk: 'medium',
           toolCallIds: ['call-test'],
+        },
+      ],
+      activity: [
+        {
+          toolCallId: 'call-review',
+          toolName: 'Agent',
+          delegation: 'Review the delivery evidence.',
         },
       ],
     });

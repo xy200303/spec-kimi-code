@@ -99,6 +99,8 @@ ${qualityGate}
 
 ## Tasks
 
+## Activity
+
 ## Changes
 
 ## Evidence
