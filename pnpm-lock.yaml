@@ -170,6 +170,15 @@ importers:
         specifier: 6.0.2
         version: 6.0.2
 
+  apps/kimi-vscode:
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.95.0
+        version: 1.125.0
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+
   apps/kimi-web:
     dependencies:
       '@chenglou/pretext':
@@ -3281,6 +3290,9 @@ packages:
 
   '@types/verror@1.10.11':
     resolution: {integrity: sha512-RlDm9K7+o5stv0Co8i8ZRGxDbrTxhJtgjqjFyVh/tXQyl/rYtTKlnTvZ88oSTeYREWurwx20Js4kTuKCsFkUtg==}
+
+  '@types/vscode@1.125.0':
+    resolution: {integrity: sha512-0icm/ZQAaism87P0ekHqi4/Ju9du+Tm0RUW+y7vqRsxY2cY0FNRX1nAnaW7nT6npPt2tfHiheZ55Zm9UhqonFA==}
 
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
@@ -10214,6 +10226,8 @@ snapshots:
 
   '@types/verror@1.10.11':
     optional: true
+
+  '@types/vscode@1.125.0': {}
 
   '@types/web-bluetooth@0.0.21': {}
 
