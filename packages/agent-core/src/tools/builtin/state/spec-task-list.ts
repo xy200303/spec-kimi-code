@@ -134,6 +134,24 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
           };
         }
         const tasks = args.tasks ?? this.getTasks();
+        if (args.activeTaskId !== undefined) {
+          const activeTask =
+            args.activeTaskId === null
+              ? undefined
+              : tasks.find((task) => task.id === args.activeTaskId);
+          if (args.activeTaskId !== null && activeTask === undefined) {
+            return {
+              isError: true,
+              output: `Unknown spec task id: ${args.activeTaskId}`,
+            };
+          }
+          if (activeTask !== undefined && !isActiveTask(activeTask)) {
+            return {
+              isError: true,
+              output: `Spec task is not active: ${activeTask.id}`,
+            };
+          }
+        }
         if (args.tasks !== undefined) {
           this.setTasks(tasks);
         }
@@ -142,18 +160,12 @@ export class SpecTaskListTool implements BuiltinTool<SpecTaskListInput> {
         if (
           args.activeTaskId === undefined &&
           activeTaskId !== null &&
-          !tasks.some((task) => task.id === activeTaskId)
+          !isActiveTask(tasks.find((task) => task.id === activeTaskId))
         ) {
           this.setActiveTaskId(null);
           activeTaskId = null;
         }
         if (args.activeTaskId !== undefined) {
-          if (args.activeTaskId !== null && !tasks.some((task) => task.id === args.activeTaskId)) {
-            return {
-              isError: true,
-              output: `Unknown spec task id: ${args.activeTaskId}`,
-            };
-          }
           this.setActiveTaskId(args.activeTaskId);
           activeTaskId = args.activeTaskId;
         }
@@ -247,4 +259,8 @@ function copyTask(task: SpecTask): SpecTask {
 
 function hasUniqueTaskIds(tasks: readonly SpecTask[]): boolean {
   return new Set(tasks.map((task) => task.id)).size === tasks.length;
+}
+
+function isActiveTask(task: SpecTask | undefined): task is SpecTask {
+  return task !== undefined && (task.status === 'pending' || task.status === 'in_progress');
 }

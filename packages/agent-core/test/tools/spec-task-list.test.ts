@@ -210,6 +210,54 @@ describe('SpecTaskListTool', () => {
     expect(query.output).toContain('Active spec task: task-track-changes');
   });
 
+  it('rejects a completed task as the active task without replacing the ledger', async () => {
+    const existingTask: SpecTask = {
+      id: 'task-existing',
+      title: 'Keep existing ledger',
+      status: 'in_progress',
+      reason: 'Prove rejected updates are atomic.',
+    };
+    const { tool, getTasks } = makeTool([existingTask]);
+    const completedTask: SpecTask = {
+      id: 'task-complete',
+      title: 'Complete delivery',
+      status: 'done',
+      reason: 'Keep later tool calls out of completed work.',
+    };
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-completed-active-task',
+      args: { tasks: [completedTask], activeTaskId: 'task-complete' },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('Spec task is not active: task-complete');
+    expect(getTasks()).toEqual([existingTask]);
+  });
+
+  it('rejects a completed stored task as the active task', async () => {
+    const { tool } = makeTool([
+      {
+        id: 'task-complete',
+        title: 'Complete delivery',
+        status: 'done',
+        reason: 'Keep later tool calls out of completed work.',
+      },
+    ]);
+
+    const result = await executeTool(tool, {
+      turnId: 't1',
+      toolCallId: 'call-completed-active-task',
+      args: { activeTaskId: 'task-complete' },
+      signal,
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result.output).toContain('Spec task is not active: task-complete');
+  });
+
   it('rejects task updates when the spec run has been finalized', async () => {
     const task: SpecTask = {
       id: 'task-finalized',
@@ -260,7 +308,7 @@ describe('SpecTaskListTool', () => {
     const task: SpecTask = {
       id: 'task-trace',
       title: 'Trace changes',
-      status: 'done',
+      status: 'in_progress',
       reason: 'Keep the audit record useful.',
     };
     const update = await executeTool(tool, {
