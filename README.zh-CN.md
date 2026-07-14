@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.svg" width="120" alt="Spec Kimi logo">
+
 # Spec Kimi
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) · [English](README.md)
