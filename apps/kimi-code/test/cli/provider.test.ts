@@ -1,4 +1,4 @@
-/**
+﻿/**
  * `kimi provider` CLI unit tests. The handlers receive an injected `getHarness`
  * + capturing stdout/stderr, so we test the wiring end-to-end without booting
  * a real harness or hitting the network.
@@ -54,7 +54,7 @@ function makeHarness(initial: KimiConfig): {
       // Mirror the real `setKimiConfig`: deep-merge with undefined keys
       // skipped (see `agent-core/src/config/merge.ts deepMerge`). This is
       // load-bearing for tests that assert `setConfig({defaultModel:
-      // undefined})` does NOT wipe a key from disk — only `removeProvider`
+      // undefined})` does NOT wipe a key from disk 鈥?only `removeProvider`
       // can.
       const next: Record<string, unknown> = { ...persisted };
       for (const [key, value] of Object.entries(patch)) {
@@ -344,7 +344,7 @@ describe('kimi provider add', () => {
 
     expect(exitCodes).toEqual([]);
     const final = current();
-    // BOTH providers must end up in the final config — `kohub` was newly
+    // BOTH providers must end up in the final config 鈥?`kohub` was newly
     // added in the loop, `kohub-responses` was replaced. The old bug dropped
     // `kohub` because the second iteration's `removeProvider` reloaded a
     // disk-backed config that had not yet been persisted with `kohub`.
@@ -554,7 +554,7 @@ describe('registerProviderCommand', () => {
     // Simulate the strict write path rejecting because config.toml is invalid.
     harness.removeProvider = async () => {
       throw new Error(
-        'Cannot change settings while config.toml is invalid — fix it first (run `kimi doctor` for details).',
+        'Cannot change settings while config.toml is invalid 鈥?fix it first (run `spec-kimi doctor` for details).',
       );
     };
     const { deps, stderr, exitCodes } = makeDeps(harness);
@@ -572,7 +572,7 @@ describe('registerProviderCommand', () => {
   });
 });
 
-describe('kimi provider catalog list', () => {
+describe('spec-kimi provider catalog list', () => {
   it('lists catalog providers with wire/model counts, sorted by id', async () => {
     mockRegistryFetch(CATALOG_BODY);
     const { harness } = makeHarness({ providers: {} } as KimiConfig);
@@ -733,7 +733,7 @@ describe('kimi provider catalog add', () => {
     expect(exitCodes).toEqual([1]);
     const err = stderr.join('');
     expect(err).toContain('"does-not-exist" is not in provider "anthropic"');
-    expect(err).toContain('kimi provider catalog list anthropic');
+    expect(err).toContain('spec-kimi provider catalog list anthropic');
   });
 
   it('preserves an existing default_model when re-importing the same provider without --default-model', async () => {
@@ -809,7 +809,7 @@ describe('kimi provider catalog add', () => {
     // `resolveThinkingEffort` treats `thinking.enabled === false` as an
     // explicit "off" request. A fresh `kimi provider catalog add
     // anthropic --default-model claude-opus-4-7` must NOT silently disable
-    // thinking — it should leave `thinking.enabled` unset so the runtime
+    // thinking 鈥?it should leave `thinking.enabled` unset so the runtime
     // uses the per-model default.
     mockRegistryFetch(CATALOG_BODY);
     // Note: `thinking.enabled` is omitted on purpose to model a fresh user.
@@ -870,7 +870,7 @@ describe('kimi provider catalog add', () => {
     // The legacy alias must have been replaced by the catalog's models.
     expect(current().models?.['anthropic/legacy-claude']).toBeUndefined();
     expect(current().models?.['anthropic/claude-opus-4-7']).toBeDefined();
-    // The dangling default must NOT have been restored — it would point at
+    // The dangling default must NOT have been restored 鈥?it would point at
     // a non-existent alias. The handler clears it instead.
     expect(current().defaultModel).toBeUndefined();
   });

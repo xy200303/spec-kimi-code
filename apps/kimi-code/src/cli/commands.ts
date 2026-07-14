@@ -84,7 +84,7 @@ export function createProgram(
     )
     .addOption(new Option('--yes').hideHelp().default(false))
     .addOption(new Option('--auto-approve').hideHelp().default(false))
-    .option('--plan', 'Spec plan mode is enabled by default for interactive sessions.', false);
+    .option('--plan', 'Enter plan mode at startup for spec-driven planning.', false);
 
   registerExportCommand(program);
   registerProviderCommand(program);

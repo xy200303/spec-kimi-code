@@ -1,5 +1,5 @@
-/**
- * `kimi provider` sub-command — non-interactive provider management.
+﻿/**
+ * `kimi provider` sub-command 鈥?non-interactive provider management.
  *
  * Mirrors the TUI `/provider` flow (apps/kimi-code/src/tui/commands/provider.ts)
  * for the custom-registry path so users can import an api.json document, drop
@@ -204,8 +204,8 @@ export async function handleProviderList(
 }
 
 /**
- * Fetches the models.dev-style public catalog and lists providers, or — when
- * `providerId` is given — drills into one provider and lists its models. This
+ * Fetches the models.dev-style public catalog and lists providers, or 鈥?when
+ * `providerId` is given 鈥?drills into one provider and lists its models. This
  * mirrors the discovery half of the TUI "Known third-party provider" flow.
  */
 export async function handleCatalogList(
@@ -324,7 +324,7 @@ export async function handleCatalogAdd(
 
   if (opts.defaultModel !== undefined && !models.some((m) => m.id === opts.defaultModel)) {
     deps.stderr.write(
-      `Model "${opts.defaultModel}" is not in provider "${providerId}". Run "kimi provider catalog list ${providerId}" to see available ids.\n`,
+      `Model "${opts.defaultModel}" is not in provider "${providerId}". Run "spec-kimi provider catalog list ${providerId}" to see available ids.\n`,
     );
     deps.exit(1);
   }
@@ -373,7 +373,7 @@ export async function handleCatalogAdd(
     config.defaultModel = stillResolves ? previousDefaultModel : undefined;
   }
 
-  // Always restore `[thinking]` from what was there before — including
+  // Always restore `[thinking]` from what was there before 鈥?including
   // `undefined`. Persisting `enabled: false` when the user never set it would
   // make `resolveThinkingEffort` (agent-core/src/agent/config/thinking.ts) treat
   // it as an explicit "off" request and silently disable thinking, even for

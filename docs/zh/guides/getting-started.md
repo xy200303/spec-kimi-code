@@ -47,7 +47,7 @@ cd your-project
 spec-kimi
 ```
 
-交互式会话会始终启用 Spec Coding，并默认从 Plan 模式开始。描述目标、范围、约束和验收标准；Agent 会在实现前将供审查的项目内文档写入 `specs/<run-id>/`。
+交互式会话会始终启用 Spec Coding，Agent 按任务判断是否需要进入 Plan 模式。对于需要规划的任务，描述目标、范围、约束和验收标准；Agent 会在实现前将供审查的项目内文档写入 `specs/<name>/`。
 
 使用 `-c` 继续当前工作目录的上一次会话：
 
@@ -73,7 +73,7 @@ spec-kimi -p "总结这个仓库的目录结构"
 在 src/utils 中新增一个把字符串转换为 kebab-case 的函数。保持公开 API 不变，补充聚焦测试，并在最终化前展示验证证据。
 ```
 
-审查 `specs/<run-id>/` 中生成的 `spec.md` 和 `design.md`。批准后，运行会按任务范围执行工作，并生成 `delivery.md` 和机器可读的 `delivery.json`。完整生命周期与记录结构见[规格驱动开发](./spec-coding.md)。
+审查 `specs/<name>/` 中生成的 `spec.md`。批准后，运行会按任务清单执行工作，勾选任务即为进度更新；实施与验证完成后，Agent 会按模板填写 `delivery.md`。完整生命周期与记录结构见[规格驱动开发](./spec-coding.md)。
 
 ## 常用命令与快捷键
 
@@ -91,7 +91,7 @@ spec-kimi -p "总结这个仓库的目录结构"
 
 ## 数据存放在哪里
 
-用户级配置、会话、日志和更新缓存默认保存在 `~/.kimi-code/` 下，可用 `KIMI_CODE_HOME` 迁移。Spec Coding 记录则刻意与其分离，保存在项目根目录的 `specs/<run-id>/`，可与源代码一起审查。
+用户级配置、会话、日志和更新缓存默认保存在 `~/.kimi-code/` 下，可用 `KIMI_CODE_HOME` 迁移。Spec Coding 记录则刻意与其分离，保存在项目根目录的 `specs/<name>/`，可与源代码一起审查。
 
 ## 下一步
 

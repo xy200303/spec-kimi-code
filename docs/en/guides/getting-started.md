@@ -47,7 +47,7 @@ cd your-project
 spec-kimi
 ```
 
-Interactive sessions always enable Spec Coding and start in Plan mode. Describe the outcome, scope, constraints, and acceptance criteria; the agent creates project-local documents under `specs/<run-id>/` for review before implementation.
+Interactive sessions always enable Spec Coding, and the agent decides whether to enter Plan mode for each task. For tasks that need planning, describe the outcome, scope, constraints, and acceptance criteria; the agent creates project-local documents under `specs/<name>/` for review before implementation.
 
 Use `-c` to continue the previous session for the working directory:
 
@@ -73,7 +73,7 @@ Start with a concrete outcome and boundaries, for example:
 Add a function in src/utils that converts a string to kebab-case. Keep the public API unchanged, add focused tests, and show the verification evidence before finalizing.
 ```
 
-Review the generated `spec.md` and `design.md` in `specs/<run-id>/`. After approval, the run executes task-scoped work and produces `delivery.md` plus machine-readable `delivery.json`. See [Spec-driven development](./spec-coding.md) for the complete lifecycle and record layout.
+Review the generated `spec.md` in `specs/<name>/`. After approval, the run executes the task checklist; checking off tasks in `spec.md` is the progress update. Once implementation and verification are complete, the agent fills in `delivery.md` from its template. See [Spec-driven development](./spec-coding.md) for the complete lifecycle and record layout.
 
 ## Common commands and keyboard shortcuts
 
@@ -91,7 +91,7 @@ Use `/help` for the built-in command and shortcut panel. The most useful control
 
 ## Where data is stored
 
-User-level configuration, sessions, logs, and update cache are stored under `~/.kimi-code/` by default and can be moved with `KIMI_CODE_HOME`. Spec Coding records are separate by design: they stay in the project root at `specs/<run-id>/`, so they can be reviewed with the source tree.
+User-level configuration, sessions, logs, and update cache are stored under `~/.kimi-code/` by default and can be moved with `KIMI_CODE_HOME`. Spec Coding records are separate by design: they stay in the project root at `specs/<name>/`, so they can be reviewed with the source tree.
 
 ## Next steps
 

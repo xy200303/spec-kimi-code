@@ -585,7 +585,7 @@ describe('runShell', () => {
       expect(mocks.harnessTrack).not.toHaveBeenCalledWith('exit', expect.anything());
       expect(mocks.shutdownTelemetry).toHaveBeenCalledOnce();
       expect(stdout.text()).toBe(' Bye!\n');
-      expect(stderr.text()).toContain(' To resume this session: kimi -r ses-1');
+      expect(stderr.text()).toContain(' To resume this session: spec-kimi -r ses-1');
     } finally {
       exitSpy.mockRestore();
       stdout.restore();
@@ -630,7 +630,7 @@ describe('runShell', () => {
         ExitCalled,
       );
 
-      expect(stderr.text()).toContain(' To resume this session: kimi -r ses-1');
+      expect(stderr.text()).toContain(' To resume this session: spec-kimi -r ses-1');
       expect(stderr.text()).toContain('open ');
       expect(stderr.text()).toContain(openedUrl);
     } finally {

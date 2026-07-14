@@ -54,16 +54,16 @@ export interface ValidatedOptions {
 }
 
 /**
- * spec-kimi is a spec-first CLI: interactive work always starts in Plan mode.
- * Print mode stays non-interactive because it cannot present a plan for review.
+ * spec-kimi enables the spec-coding workspace so the agent can choose a run
+ * mode per task. Simple tasks are executed directly; non-trivial or ambiguous
+ * work enters plan mode via EnterPlanMode. Print mode cannot plan interactively.
  */
 export function prepareSpecCodingOptions(
   opts: CLIOptions,
   env: NodeJS.ProcessEnv = process.env,
 ): CLIOptions {
   env[SPEC_CODING_ENV] = '1';
-  if (opts.prompt !== undefined) return opts;
-  return opts.plan ? opts : { ...opts, plan: true };
+  return opts;
 }
 
 export class OptionConflictError extends Error {

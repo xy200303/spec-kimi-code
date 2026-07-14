@@ -1,5 +1,5 @@
-/**
- * `kimi vis` sub-command.
+﻿/**
+ * `spec-kimi vis` sub-command.
  *
  * CLI glue only: resolves the kimi home, starts the in-process session
  * visualizer server (auto-picking a free port by default), prints the URL,
@@ -53,7 +53,7 @@ export async function handleVis(deps: VisDeps, opts: VisOptions): Promise<void> 
 
   // Lazily load the embedded single-file SPA so normal `kimi` startup never
   // pays for it. The module is generated at build time (prebuild). When running
-  // from source without a build — e.g. tests — the generated value module is
+  // from source without a build 鈥?e.g. tests 鈥?the generated value module is
   // absent and the dynamic import throws; in that case the server falls back to
   // its own static `public/` directory.
   let webAsset: { gzipped: Uint8Array } | undefined;
@@ -63,7 +63,7 @@ export async function handleVis(deps: VisDeps, opts: VisOptions): Promise<void> 
       webAsset = { gzipped: new Uint8Array(Buffer.from(VIS_WEB_GZIP_B64, 'base64')) };
     }
   } catch {
-    // Embedded asset not generated in this context — fall back to filesystem.
+    // Embedded asset not generated in this context 鈥?fall back to filesystem.
   }
 
   let server: StartedVisServer;
@@ -76,7 +76,7 @@ export async function handleVis(deps: VisDeps, opts: VisOptions): Promise<void> 
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    deps.stderr.write(`Failed to start kimi vis: ${msg}\n`);
+    deps.stderr.write(`Failed to start spec-kimi vis: ${msg}\n`);
     return deps.exit(1);
   }
 
@@ -85,7 +85,7 @@ export async function handleVis(deps: VisDeps, opts: VisOptions): Promise<void> 
       ? server.url
       : `${server.url}sessions/${encodeURIComponent(opts.sessionId)}`;
 
-  deps.stdout.write(`kimi vis is running at ${server.url}\n`);
+  deps.stdout.write(`spec-kimi vis is running at ${server.url}\n`);
   deps.stdout.write('Press Ctrl-C to stop.\n');
 
   if (opts.open) {

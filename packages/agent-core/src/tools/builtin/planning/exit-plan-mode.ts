@@ -7,7 +7,6 @@
  */
 
 import type { Agent } from '#/agent';
-import { formatSpecStrategyDecision } from '#/agent/plan/strategy-router';
 import type { PlanData } from '#/agent/plan';
 import { z } from 'zod';
 
@@ -15,7 +14,6 @@ import type { BuiltinTool } from '../../../agent/tool';
 import type { ExecutableToolResult, ToolExecution } from '../../../loop/types';
 import type { ToolInputDisplay } from '../../display';
 import { toInputJsonSchema } from '../../support/input-schema';
-import type { SpecStrategyDecision } from '../state/spec-delivery';
 import DESCRIPTION from './exit-plan-mode.md?raw';
 
 // ── Input schema ─────────────────────────────────────────────────────
@@ -90,9 +88,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
 
   async resolveExecution(args: ExitPlanModeInput): Promise<ToolExecution> {
     const display = await this.resolvePlanReviewDisplay(args);
-    if (display?.kind === 'plan_review') {
-      await this.agent.planMode.routeSpecStrategy().catch(() => null);
-    }
     return {
       description: 'Presenting plan and exiting plan mode',
       display,
@@ -141,14 +136,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     });
 
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
-    const qualityGate = this.agent.planMode.qualityGate;
-    const strategy = this.agent.planMode.strategy;
-    if (this.agent.planMode.approveSpecRun?.('auto') === false) {
-      return {
-        isError: true,
-        output: 'Failed to finalize the approved spec run. Re-read the specification and design, then retry ExitPlanMode.',
-      };
-    }
     const failed = this.exitPlanMode();
     if (failed !== undefined) return failed;
 
@@ -160,8 +147,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
         resolvedPlan.plan,
         resolvedPlan.path,
         deliveryPath,
-        qualityGate,
-        strategy,
       )}`,
     };
   }
@@ -181,8 +166,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   private async resolvePlan(): Promise<ResolvePlanResult> {
     const specificationError = await this.resolveSpecification();
     if (specificationError !== undefined) return { ok: false, error: specificationError };
-    const designError = await this.resolveDesign();
-    if (designError !== undefined) return { ok: false, error: designError };
 
     let source: ExitPlanModePlanSource | null;
     try {
@@ -219,14 +202,8 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
 
   private async hasCompletePlanningDocuments(): Promise<boolean> {
     try {
-      const [specification, design] = await Promise.all([
-        this.agent.planMode.specificationData(),
-        this.agent.planMode.designData(),
-      ]);
-      return (
-        (specification === null || specification.missingSections.length === 0) &&
-        (design === null || design.missingSections.length === 0)
-      );
+      const specification = await this.agent.planMode.specificationData();
+      return specification === null || specification.missingSections.length === 0;
     } catch {
       return false;
     }
@@ -246,25 +223,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
       isError: true,
       output:
         `Specification is incomplete. Complete ${specification.missingSections.join(', ')} in ` +
-        `${specification.path} before requesting design approval.`,
-    };
-  }
-
-  private async resolveDesign(): Promise<ExecutableToolResult | undefined> {
-    let design;
-    try {
-      design = await this.agent.planMode.designData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to read design file.';
-      return { isError: true, output: `Failed to read design file: ${message}` };
-    }
-    if (design === null || design.missingSections.length === 0) return undefined;
-
-    return {
-      isError: true,
-      output:
-        `Design is incomplete. Complete ${design.missingSections.join(', ')} in ` +
-        `${design.path} before requesting approval.`,
+        `${specification.path} before requesting approval.`,
     };
   }
 }
@@ -287,17 +246,15 @@ function normalizeOptionLabel(label: string): string {
   return label.trim().toLowerCase();
 }
 
-function formatPlanForOutput(
+export function formatPlanForOutput(
   plan: string,
   path: string | undefined,
   deliveryPath: string | undefined,
-  qualityGate: string | null,
-  strategy: SpecStrategyDecision | null,
 ): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
   const delivery =
     deliveryPath === undefined
       ? ''
-    : `\n\nThe approved specification and design have been frozen for this run. Use SpecRun to re-check the goal, constraints, and acceptance criteria during implementation. After implementation and verification, use SpecDelivery to satisfy the ${qualityGate ?? 'standard'} quality gate and write the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${formatSpecStrategyDecision(strategy)}${delivery}`;
+      : `\n\nDuring implementation, keep the task checklist in the specification up to date — checking off a task is the progress record. After implementation and verification, complete the delivery record from its template: ${deliveryPath}`;
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
 }

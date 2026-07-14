@@ -44,6 +44,7 @@ function makeAgent(
       get planFilePath() {
         return input.planFilePath ?? null;
       },
+      resolveSpecRunId: vi.fn(async () => 'mock-plan'),
       enter: async (id = 'mock-plan') => {
         emit({ type: 'plan_mode.enter', id });
         await enter();

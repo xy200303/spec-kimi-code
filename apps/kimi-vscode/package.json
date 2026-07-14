@@ -2,9 +2,15 @@
   "name": "@moonshot-ai/kimi-vscode",
   "version": "0.1.0",
   "private": true,
+  "displayName": "Kimi Spec Coding",
+  "description": "Browse project-local Kimi specification runs and delivery records.",
+  "publisher": "moonshot-ai",
+  "license": "MIT",
   "type": "module",
   "engines": { "vscode": "^1.95.0" },
   "main": "./dist/extension.js",
+  "categories": ["Other"],
+  "keywords": ["kimi", "specification", "planning", "delivery"],
   "activationEvents": ["onView:kimiSpecRuns", "onCommand:kimiSpec.openLatestRun", "onCommand:kimiSpec.refreshRuns"],
   "contributes": {
     "commands": [
@@ -18,6 +24,15 @@
       ]
     }
   },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "devDependencies": { "@types/vscode": "^1.95.0", "typescript": "^6.0.2" }
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "vscode:prepublish": "pnpm run build",
+    "package": "vsce package --out dist/kimi-spec-coding.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.7.1",
+    "typescript": "^6.0.2"
+  }
 }

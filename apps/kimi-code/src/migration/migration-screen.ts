@@ -288,7 +288,7 @@ export class MigrationScreenComponent extends Container implements Focusable {
         lines.push(chalk.hex(colors.text)(` Reason: ${this.migrationFailureReason}`));
       }
       lines.push('');
-      lines.push(chalk.hex(colors.text)(' You can retry later by running "kimi migrate".'));
+      lines.push(chalk.hex(colors.text)(' You can retry later by running "spec-kimi migrate".'));
       lines.push('');
       lines.push(chalk.hex(colors.textMuted)(' ⏎ continue to kimi-code'));
       lines.push(chalk.hex(colors.primary)('─'.repeat(width)));

@@ -232,7 +232,7 @@ describe('runV2Print', () => {
       },
     });
     // Version banner is first, then the rendered assistant output.
-    expect(stderr.write).toHaveBeenNthCalledWith(1, 'kimi version 1.2.3-test\n');
+    expect(stderr.write).toHaveBeenNthCalledWith(1, 'spec-kimi version 1.2.3-test\n');
     expect(stdout.text()).toContain('hello world');
     expect(app.dispose).toHaveBeenCalled();
   });

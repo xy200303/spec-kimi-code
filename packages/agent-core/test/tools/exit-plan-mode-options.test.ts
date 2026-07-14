@@ -40,6 +40,9 @@ function makeAgent(
       get planFilePath() {
         return input.planFilePath ?? null;
       },
+      get specDocuments() {
+        return null;
+      },
       data: vi.fn(async () => {
         if (input.plan === null) return null;
         return {
@@ -47,6 +50,7 @@ function makeAgent(
           path: input.path ?? '/tmp/plan.md',
         };
       }),
+      specificationData: vi.fn(async () => null),
       exit: () => {
         emit({ type: 'plan_mode.exit' });
       },

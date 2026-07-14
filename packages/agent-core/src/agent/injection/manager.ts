@@ -6,6 +6,7 @@ import type { DynamicInjector } from './injector';
 import { PermissionModeInjector } from './permission-mode';
 import { PluginSessionStartInjector } from './plugin-session-start';
 import { PlanModeInjector } from './plan-mode';
+import { SpecWorkflowInjector } from './spec-workflow';
 import { TodoListReminderInjector } from './todo-list';
 import { ToolsDiffInjector } from './tools-diff';
 
@@ -30,6 +31,7 @@ export class InjectionManager {
       new TodoListReminderInjector(agent),
       new PlanModeInjector(agent),
       new PermissionModeInjector(agent),
+      new SpecWorkflowInjector(agent),
     ];
     this.goalInjector = agent.type === 'main' ? new GoalInjector(agent) : null;
     this.toolsDiffInjector = new ToolsDiffInjector(agent);

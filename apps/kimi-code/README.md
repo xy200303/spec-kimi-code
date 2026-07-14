@@ -17,18 +17,18 @@ Node.js 22.19.0 or later must be available on `PATH`. The package name remains c
 
 ## Spec-first workflow
 
-Running `spec-kimi` interactively enables Spec Coding and enters Plan mode by default. The workflow captures a goal and constraints, produces a specification and design, locks the approved snapshot, executes task-scoped changes, validates evidence, and finalizes a delivery record.
+Running `spec-kimi` interactively enables Spec Coding, and the agent chooses whether to enter Plan mode for each task. When a task needs planning, the workflow captures a goal and constraints, produces a `spec.md`, approves it as the run's source of truth, executes the task checklist while checking off progress, and fills in `delivery.md` after verification.
 
-Each run stores `spec.md`, `design.md`, `delivery.md`, and `delivery.json` under `specs/<run-id>/` in the project root. The delivery record links tasks, changes, approvals, risks, quality-gate evidence, decisions, open questions, and rollback notes.
+Each spec run stores `spec.md` and `delivery.md` under `specs/<name>/` in the project root.
 
 `spec-kimi -p` is a non-interactive output interface. It cannot present an approval flow and is not a substitute for the interactive, auditable development workflow.
 
 ## Capabilities
 
-- Strategy routing for planning, MVP work, controlled features, bug diagnosis, refactoring, review, release, and research.
-- Risk-aware task permissions and an approval audit trail.
-- Quality gates: `fast`, `standard`, `strict`, and `release`.
-- Markdown and JSON delivery records, finalized to prevent silent changes after completion.
+- Four modes: direct execution, prototype spec, standard spec, and strict spec.
+- Project-local `spec.md` + `delivery.md` records; the document is the state.
+- Questioning only when a requirement is ambiguous and high-risk.
+- High code-quality defaults: documented functions, named constants, clear boundaries, and mature reuse.
 
 See the repository [Spec Coding guide](../../docs/en/guides/spec-coding.md) for the workflow and artifacts.
 

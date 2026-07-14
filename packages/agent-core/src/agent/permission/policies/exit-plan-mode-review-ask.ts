@@ -1,5 +1,5 @@
 import type { Agent } from '../..';
-import { formatSpecStrategyDecision } from '../../plan/strategy-router';
+import { formatPlanForOutput } from '../../../tools/builtin/planning/exit-plan-mode';
 import type { ApprovalResponse, PermissionPolicy, PermissionPolicyContext, PermissionPolicyResult } from '../types';
 
 interface ExitPlanModeOption {
@@ -50,18 +50,6 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
     const selected = selectedExitPlanModeOption(display.options, result.selectedLabel);
 
     const deliveryPath = this.agent.planMode.specDocuments?.delivery;
-    const qualityGate = this.agent.planMode.qualityGate;
-    const strategy = this.agent.planMode.strategy;
-    if (this.agent.planMode.approveSpecRun?.('user', selected?.label) === false) {
-      return {
-        kind: 'result' as const,
-        syntheticResult: {
-          isError: true,
-          output:
-            'Failed to finalize the approved spec run. Re-read the specification and design, then retry ExitPlanMode.',
-        },
-      };
-    }
     const failed = this.exitPlanMode();
     if (failed !== undefined) {
       return { kind: 'result' as const, syntheticResult: failed };
@@ -80,12 +68,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
       selected === undefined
         ? ''
         : `Selected approach: ${selected.label}\nExecute ONLY the selected approach. Do not execute any unselected alternatives.\n\n`;
-    const savedTo = display.path !== undefined ? `Plan saved to: ${display.path}\n\n` : '';
-    const delivery =
-      deliveryPath === undefined
-        ? ''
-        : `\n\nThe approved specification and design have been frozen for this run. Use SpecRun to re-check the goal, constraints, and acceptance criteria during implementation. After implementation and verification, use SpecDelivery to satisfy the ${qualityGate ?? 'standard'} quality gate and write the delivery record with changes, evidence, decisions, risks, open questions, and rollback notes: ${deliveryPath}`;
-    const formattedPlan = `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${display.plan}${formatSpecStrategyDecision(strategy)}${delivery}`;
+    const formattedPlan = formatPlanForOutput(display.plan, display.path, deliveryPath);
     return {
       kind: 'result' as const,
       syntheticResult: {
@@ -97,7 +80,6 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
 
   private rejectedExitPlanModeApprovalResult(result: ApprovalResponse) {
     this.trackRejectedPlanResolution(result);
-    this.agent.planMode.clearSpecRunApproval?.();
 
     if (result.decision === 'cancelled') {
       return {
@@ -110,7 +92,7 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
     }
 
     if (result.selectedLabel === 'Reject and Exit') {
-      const failed = this.exitPlanMode(false);
+      const failed = this.exitPlanMode();
       return {
         kind: 'result' as const,
         syntheticResult:
@@ -146,9 +128,9 @@ export class ExitPlanModeReviewAskPermissionPolicy implements PermissionPolicy {
     };
   }
 
-  private exitPlanMode(retainSpecRun = true): { isError: true; output: string } | undefined {
+  private exitPlanMode(): { isError: true; output: string } | undefined {
     try {
-      this.agent.planMode.exit(undefined, retainSpecRun);
+      this.agent.planMode.exit();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to exit plan mode.';
       return {

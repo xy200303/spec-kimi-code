@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+﻿import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -893,7 +893,7 @@ describe('KimiTUI startup', () => {
 
     expect(resumeSession).not.toHaveBeenCalled();
     expect(driver.state.activeDialog).toBeNull();
-    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj-b')} && kimi --resume ${quoteShellArg('ses-other-cwd')}`;
+    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj-b')} && spec-kimi --resume ${quoteShellArg('ses-other-cwd')}`;
     expect(copyTextToClipboardMock).toHaveBeenCalledWith(expectedResumeCmd);
     const transcript = driver.state.transcriptContainer.render(160).join('\n');
     expect(transcript).toContain('Current session is in a different working directory.');
@@ -931,7 +931,7 @@ describe('KimiTUI startup', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(resumeSession).not.toHaveBeenCalled();
-    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj$(touch /tmp/pwned)')} && kimi --resume ${quoteShellArg('ses-other-cwd')}`;
+    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj$(touch /tmp/pwned)')} && spec-kimi --resume ${quoteShellArg('ses-other-cwd')}`;
     expect(copyTextToClipboardMock).toHaveBeenCalledWith(expectedResumeCmd);
     const transcript = driver.state.transcriptContainer.render(160).join('\n');
     expect(transcript).toContain(`To resume, run: ${expectedResumeCmd}`);
@@ -968,7 +968,7 @@ describe('KimiTUI startup', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(resumeSession).not.toHaveBeenCalled();
-    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj-b')} && kimi --resume ${quoteShellArg('ses-other-cwd')}`;
+    const expectedResumeCmd = `cd ${quoteShellArg('/tmp/proj-b')} && spec-kimi --resume ${quoteShellArg('ses-other-cwd')}`;
     expect(copyTextToClipboardMock).toHaveBeenCalledWith(expectedResumeCmd);
     expect(stop).toHaveBeenCalledOnce();
     expect(stop).toHaveBeenCalledWith(0);
@@ -1263,7 +1263,7 @@ describe('KimiTUI startup', () => {
 
     expect(session.setModel).toHaveBeenCalledWith('k2');
     // `thinking.enabled === true` means "leave the session's current thinking
-    // level alone" — only an explicit `enabled === false` forces `'off'`.
+    // level alone" 鈥?only an explicit `enabled === false` forces `'off'`.
     expect(session.setThinking).not.toHaveBeenCalled();
     expect(driver.state.appState).toMatchObject({
       model: 'k2',
@@ -1503,7 +1503,7 @@ describe('KimiTUI startup', () => {
       migrationPlan: MIGRATION_PLAN,
       migrateOnly: true,
     }) as unknown as MigrateExitDriver;
-    // pi-tui start/stop and focus tracking touch the real TTY — stub the I/O.
+    // pi-tui start/stop and focus tracking touch the real TTY 鈥?stub the I/O.
     vi.spyOn(driver.state.ui, 'start').mockImplementation(() => {});
     vi.spyOn(driver.state.ui, 'stop').mockImplementation(() => {});
     vi.spyOn(driver.state.terminal, 'write').mockImplementation(() => {});
@@ -1515,7 +1515,7 @@ describe('KimiTUI startup', () => {
     await driver.start();
 
     // `kimi migrate` exits via process.exit; startEventLoop() installed focus
-    // tracking, so the exit path must dispose it — otherwise the terminal
+    // tracking, so the exit path must dispose it 鈥?otherwise the terminal
     // keeps emitting focus/OSC sequences after the command finishes.
     expect(driver.terminalFocusTrackingDispose).toBeUndefined();
     expect(onExit).toHaveBeenCalledWith(0);
@@ -1539,7 +1539,7 @@ describe('KimiTUI startup', () => {
     await expect(driver.start()).rejects.toThrow('resume boom');
 
     // The focus tracking installed by startEventLoop() must be torn down
-    // before the error propagates — not left active after the process exits.
+    // before the error propagates 鈥?not left active after the process exits.
     expect(driver.terminalFocusTrackingDispose).toBeUndefined();
   });
 

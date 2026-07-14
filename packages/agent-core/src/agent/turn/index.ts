@@ -884,12 +884,6 @@ export class TurnFlow {
                 ctx.args,
                 ctx.result,
               );
-              this.agent.specTaskTracker.recordToolResult({
-                toolCallId: ctx.toolCall.id,
-                toolName: ctx.toolCall.name,
-                args: ctx.args,
-                result: finalResult,
-              });
               const { isError, output } = finalResult;
               const event = isError === true ? 'PostToolUseFailure' : 'PostToolUse';
               void this.agent.hooks?.fireAndForgetTrigger(event, {

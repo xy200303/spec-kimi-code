@@ -5,6 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Telemetry bootstrap pulls in the real SDK and starts background collectors.
+// Give Windows runs enough headroom for the heavy import path.
+vi.setConfig({ testTimeout: 60_000 });
+
 const mocks = vi.hoisted(() => ({
   initializeTelemetry: vi.fn(),
   createKimiDeviceId: vi.fn(() => 'device-123'),

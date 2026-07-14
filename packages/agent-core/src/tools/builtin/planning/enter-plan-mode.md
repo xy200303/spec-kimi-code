@@ -24,3 +24,5 @@ When NOT to use:
 - Pure research/exploration tasks
 
 Once you are in plan mode, a reminder walks you through the workflow (explore → design → write the plan file → `ExitPlanMode`) and enforces read-only access. For non-trivial tasks where you are unsure of the codebase structure or relevant code paths, use `Agent(subagent_type="explore")` to investigate first when the `Agent` tool is available.
+
+Spec-coding hosts: when the workspace supports spec runs, entering plan mode creates `specs/<name>/spec.md` (requirements + design + task checklist, in the workspace's document language) plus a `delivery.md` skeleton. Pass the `name` parameter to give the run a semantic directory name. Fill in `spec.md` during plan mode; during implementation, check off tasks in its 任务清单 as you go; after implementation and verification, complete `delivery.md` from its template.

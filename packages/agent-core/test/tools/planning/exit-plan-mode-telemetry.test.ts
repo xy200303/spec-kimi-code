@@ -40,10 +40,14 @@ function makeAgent(input: {
       get planFilePath() {
         return '/tmp/kimi-plan.md';
       },
+      get specDocuments() {
+        return null;
+      },
       data: vi.fn(async () => ({
         content: '# Plan',
         path: '/tmp/kimi-plan.md',
       })),
+      specificationData: vi.fn(async () => null),
       exit: exitPlanMode,
     },
     swarmMode: {

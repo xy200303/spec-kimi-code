@@ -54,10 +54,10 @@ describe('default agent profiles', () => {
     }
   });
 
-  it('lists spec-coding task and delivery tools on the agent profile', () => {
+  it('lists plan-mode tools on the agent profile', () => {
     const tools = DEFAULT_AGENT_PROFILES['agent']?.tools ?? [];
 
-    expect(tools).toEqual(expect.arrayContaining(['SpecTaskList', 'SpecDelivery']));
+    expect(tools).toEqual(expect.arrayContaining(['EnterPlanMode', 'ExitPlanMode']));
   });
 
   it('fails loudly when an embedded system prompt source is missing', () => {

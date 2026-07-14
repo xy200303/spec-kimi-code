@@ -2,14 +2,7 @@ import type { ToolCall } from '@moonshot-ai/kosong';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FlagResolver } from '../../src/flags';
-import { resolveSpecQualityGate } from '../../src/agent/plan';
-import { routeSpecDevelopmentStrategy } from '../../src/agent/plan/strategy-router';
-import { SPEC_DELIVERY_STORE_KEY } from '../../src/tools/builtin/state/spec-delivery';
-import {
-  SPEC_TASK_ACTIVE_STORE_KEY,
-  SPEC_TASK_STORE_KEY,
-  SPEC_TASK_TRACE_STORE_KEY,
-} from '../../src/tools/builtin/state/spec-task-list';
+import { missingSpecificationSections } from '../../src/agent/plan';
 import { createFakeKaos } from '../tools/fixtures/fake-kaos';
 import { createCommandKaos, testAgent } from './harness/agent';
 
@@ -81,58 +74,99 @@ describe('manual plan entry', () => {
       experimentalFlags: flags,
       kaos: createPlanKaos({ writeText }),
     });
-    ctx.agent.tools.updateStore(SPEC_TASK_STORE_KEY, [
-      {
-        id: 'task-previous-run',
-        title: 'Previous run task',
-        status: 'done',
-        reason: 'Verify state reset.',
-      },
-    ]);
-    ctx.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, 'task-previous-run');
-    ctx.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, [
-      {
-        taskId: 'task-previous-run',
-        toolCallId: 'call-previous-run',
-        toolName: 'Write',
-        outcome: 'succeeded',
-      },
-    ]);
 
     await ctx.agent.planMode.enter('project-documents');
 
-    expect(ctx.agent.planMode.planFilePath).toBe('/workspace/specs/project-documents/design.md');
+    expect(ctx.agent.planMode.planFilePath).toBe('/workspace/specs/project-documents/spec.md');
     expect(ctx.agent.planMode.specDocuments).toEqual({
       root: '/workspace/specs/project-documents',
       spec: '/workspace/specs/project-documents/spec.md',
-      design: '/workspace/specs/project-documents/design.md',
       delivery: '/workspace/specs/project-documents/delivery.md',
-      deliveryJson: '/workspace/specs/project-documents/delivery.json',
     });
     expect(ctx.agent.planMode.writableFilePaths).toEqual([
       '/workspace/specs/project-documents/spec.md',
-      '/workspace/specs/project-documents/design.md',
     ]);
-    expect(ctx.agent.planMode.qualityGate).toBe('standard');
-    expect(ctx.agent.tools.storeData()[SPEC_TASK_STORE_KEY]).toEqual([]);
-    expect(ctx.agent.tools.storeData()[SPEC_TASK_ACTIVE_STORE_KEY]).toBeNull();
-    expect(ctx.agent.tools.storeData()[SPEC_TASK_TRACE_STORE_KEY]).toEqual([]);
+    expect(writeText).toHaveBeenCalledTimes(2);
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/spec.md',
-      expect.stringContaining('# Specification'),
+      expect.stringContaining('## 目标'),
     );
     expect(writeText).toHaveBeenCalledWith(
-      '/workspace/specs/project-documents/design.md',
-      expect.stringContaining('# Design'),
+      '/workspace/specs/project-documents/spec.md',
+      expect.stringContaining('## 验收标准'),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      '/workspace/specs/project-documents/spec.md',
+      expect.stringContaining('## 任务清单'),
     );
     expect(writeText).toHaveBeenCalledWith(
       '/workspace/specs/project-documents/delivery.md',
-      expect.stringContaining('## Quality Gate\n\nstandard'),
+      expect.stringContaining('# 交付记录'),
     );
-    ctx.configure({ tools: ['SpecTaskList', 'SpecRun', 'SpecDelivery'] });
-    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecTaskList')).toBe(true);
-    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecRun')).toBe(true);
-    expect(ctx.agent.tools.loopTools.some((tool) => tool.name === 'SpecDelivery')).toBe(true);
+  });
+
+  it('uses the semantic name from the EnterPlanMode tool for the spec directory', async () => {
+    const writeText = vi.fn(async (_path: string, content: string) => content.length);
+    const flags = new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' });
+    const ctx = testAgent({
+      experimentalFlags: flags,
+      kaos: createPlanKaos({ writeText }),
+    });
+    ctx.configure({ tools: ['EnterPlanMode'] });
+    ctx.agent.config.update({ cwd: '/workspace' });
+    await ctx.rpc.setPermission({ mode: 'yolo' });
+
+    const enterPlanModeCall: ToolCall = {
+      type: 'function',
+      id: 'call_enter_named_plan',
+      name: 'EnterPlanMode',
+      arguments: '{"name":"nebula-effect"}',
+    };
+    ctx.mockNextResponse({ type: 'text', text: 'I will enter plan mode.' }, enterPlanModeCall);
+    ctx.mockNextResponse({ type: 'text', text: 'Plan mode is active now.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Plan the nebula effect' }] });
+
+    await ctx.untilTurnEnd();
+    await delay(10);
+    expect(ctx.agent.planMode.isActive).toBe(true);
+    expect(ctx.agent.planMode.specDocuments?.root).toBe('/workspace/specs/nebula-effect');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(
+      'Specification file: /workspace/specs/nebula-effect/spec.md',
+    );
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(
+      'Delivery record: /workspace/specs/nebula-effect/delivery.md',
+    );
+  });
+
+  it('appends a numeric suffix when the semantic spec directory already exists', async () => {
+    const flags = new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' });
+    const stat = vi.fn(async (path: string) => {
+      if (path === '/workspace/specs/nebula-effect') {
+        return { isDirectory: true } as never;
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    const ctx = testAgent({
+      experimentalFlags: flags,
+      kaos: createPlanKaos({ stat }),
+    });
+
+    const id = await ctx.agent.planMode.resolveSpecRunId('nebula-effect');
+
+    expect(id).toBe('nebula-effect-2');
+  });
+
+  it('falls back to a random slug for an invalid semantic name', async () => {
+    const flags = new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' });
+    const ctx = testAgent({
+      experimentalFlags: flags,
+      kaos: createPlanKaos(),
+    });
+
+    const id = await ctx.agent.planMode.resolveSpecRunId('Invalid_Name');
+
+    expect(id).not.toBe('Invalid_Name');
+    expect(id).toMatch(/^[a-z][a-z0-9-]*$/);
   });
 
   it('enters plan mode through the EnterPlanMode tool and reminds the next step', async () => {
@@ -163,47 +197,39 @@ describe('manual plan entry', () => {
   });
 });
 
-describe('spec quality gates', () => {
-  it.each(['fast', 'standard', 'strict', 'release'] as const)(
-    'accepts the %s quality gate',
-    (qualityGate) => {
-      expect(resolveSpecQualityGate({ KIMI_CODE_SPEC_QUALITY_GATE: qualityGate })).toBe(
-        qualityGate,
-      );
-    },
-  );
+describe('spec template section validation', () => {
+  it('treats placeholder-only sections as missing', () => {
+    const content = [
+      '# 示例',
+      '',
+      '## 目标',
+      '',
+      '## 验收标准',
+      '',
+      '- [ ]',
+      '',
+      '## 约束条件',
+    ].join('\n');
 
-  it('falls back to the standard quality gate for an invalid value', () => {
-    expect(resolveSpecQualityGate({ KIMI_CODE_SPEC_QUALITY_GATE: 'unsupported' })).toBe(
-      'standard',
-    );
+    expect(missingSpecificationSections(content)).toEqual(['目标', '验收标准']);
   });
-});
 
-describe('spec development strategy router', () => {
-  it.each([
-    ['release', 'Prepare a deployment release.', 'release', 'release'],
-    ['bug diagnosis', 'Fix a production regression.', 'bug_diagnosis', 'strict'],
-    ['refactor', 'Refactor the session flow.', 'refactor', 'strict'],
-    ['review', 'Audit the permission policy.', 'review', 'strict'],
-    ['research', 'Research the provider options.', 'research', 'fast'],
-    ['MVP', 'Build an MVP prototype.', 'agile_mvp', 'fast'],
-    ['planning', 'Produce a design-only plan.', 'planning', 'fast'],
-  ] as const)(
-    'routes %s work to %s', (_label, goal, strategy, qualityGate) => {
-      expect(routeSpecDevelopmentStrategy(goal, '')).toMatchObject({
-        strategy,
-        recommendedQualityGate: qualityGate,
-      });
-    },
-  );
+  it('accepts filled sections', () => {
+    const content = [
+      '# 示例',
+      '',
+      '## 目标',
+      '',
+      '创建一个星云特效页面。',
+      '',
+      '## 验收标准',
+      '',
+      '- [ ] 粒子数量 ≥ 50000',
+      '',
+      '## 约束条件',
+    ].join('\n');
 
-  it('uses controlled feature when no specialized signal is present', () => {
-    expect(routeSpecDevelopmentStrategy('Add a structured delivery record.', '')).toMatchObject({
-      strategy: 'controlled_feature',
-      recommendedQualityGate: 'standard',
-      requiredTaskCategories: ['impact_analysis', 'behavioral_verification'],
-    });
+    expect(missingSpecificationSections(content)).toEqual([]);
   });
 });
 
@@ -242,7 +268,7 @@ describe('plan clear', () => {
 });
 
 describe('spec coding approval', () => {
-  it('requires a complete specification before requesting design approval', async () => {
+  it('requires a complete specification before requesting approval', async () => {
     const files = new Map<string, string>();
     const readText = vi.fn(async (path: string) => files.get(path) ?? '');
     const writeText = vi.fn(async (path: string, content: string) => {
@@ -257,10 +283,6 @@ describe('spec coding approval', () => {
     await ctx.rpc.setPermission({ mode: 'yolo' });
     await ctx.agent.planMode.enter('incomplete-specification');
 
-    const designPath = ctx.agent.planMode.planFilePath;
-    if (designPath === null) throw new Error('expected design path');
-    files.set(designPath, '# Design\n\n- Implement the feature.');
-
     const exitPlanModeCall: ToolCall = {
       type: 'function',
       id: 'call_exit_incomplete_specification',
@@ -268,11 +290,11 @@ describe('spec coding approval', () => {
       arguments: '{}',
     };
     ctx.mockNextResponse(
-      { type: 'text', text: 'I will submit the design.' },
+      { type: 'text', text: 'I will submit the specification.' },
       exitPlanModeCall,
     );
     ctx.mockNextResponse({ type: 'text', text: 'I need to complete the specification.' });
-    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the specification' }] });
 
     await ctx.untilTurnEnd();
     expect(ctx.agent.planMode.isActive).toBe(true);
@@ -280,54 +302,10 @@ describe('spec coding approval', () => {
       ctx.allEvents.some((event) => event.type === '[rpc]' && event.event === 'requestApproval'),
     ).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Specification is incomplete');
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Goal, Constraints, Acceptance Criteria');
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('目标, 验收标准');
   });
 
-  it('requires a complete design before requesting approval', async () => {
-    const files = new Map<string, string>();
-    const readText = vi.fn(async (path: string) => files.get(path) ?? '');
-    const writeText = vi.fn(async (path: string, content: string) => {
-      files.set(path, content);
-      return content.length;
-    });
-    const ctx = testAgent({
-      experimentalFlags: new FlagResolver({ KIMI_CODE_EXPERIMENTAL_SPEC_CODING: '1' }),
-      kaos: createPlanKaos({ readText, writeText }),
-    });
-    ctx.configure({ tools: ['ExitPlanMode'] });
-    await ctx.rpc.setPermission({ mode: 'yolo' });
-    await ctx.agent.planMode.enter('incomplete-design');
-
-    const specPath = ctx.agent.planMode.specDocuments?.spec;
-    if (specPath === undefined) throw new Error('expected specification path');
-    files.set(
-      specPath,
-      '# Specification\n\n## Goal\n\nAdd a spec coding workspace.\n\n## Constraints\n\nKeep documents project-local.\n\n## Acceptance Criteria\n\n- Require approval before execution.',
-    );
-
-    const exitPlanModeCall: ToolCall = {
-      type: 'function',
-      id: 'call_exit_incomplete_design',
-      name: 'ExitPlanMode',
-      arguments: '{}',
-    };
-    ctx.mockNextResponse(
-      { type: 'text', text: 'I will submit the design.' },
-      exitPlanModeCall,
-    );
-    ctx.mockNextResponse({ type: 'text', text: 'I need to complete the design.' });
-    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
-
-    await ctx.untilTurnEnd();
-    expect(ctx.agent.planMode.isActive).toBe(true);
-    expect(
-      ctx.allEvents.some((event) => event.type === '[rpc]' && event.event === 'requestApproval'),
-    ).toBe(false);
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Design is incomplete');
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Tasks, Risks, Verification');
-  });
-
-  it('points to the delivery record after an approved design', async () => {
+  it('points to the delivery record after an approved specification', async () => {
     const files = new Map<string, string>();
     const readText = vi.fn(async (path: string) => files.get(path) ?? '');
     const writeText = vi.fn(async (path: string, content: string) => {
@@ -346,11 +324,7 @@ describe('spec coding approval', () => {
     if (documents === null) throw new Error('expected specification documents');
     files.set(
       documents.spec,
-      '# Specification\n\n## Goal\n\nAdd a delivery record.\n\n## Constraints\n\nKeep it project-local.\n\n## Acceptance Criteria\n\n- Record verification results.',
-    );
-    files.set(
-      documents.design,
-      '# Design\n\n## Tasks\n\n- Add the template.\n\n## Risks\n\n- Missing evidence.\n\n## Verification\n\n- Run targeted tests.',
+      '# 交付记录功能\n\n## 目标\n\n增加交付记录。\n\n## 验收标准\n\n- [ ] 记录验证结果。',
     );
 
     const exitPlanModeCall: ToolCall = {
@@ -360,32 +334,16 @@ describe('spec coding approval', () => {
       arguments: '{}',
     };
     ctx.mockNextResponse(
-      { type: 'text', text: 'I will submit the design.' },
+      { type: 'text', text: 'I will submit the specification.' },
       exitPlanModeCall,
     );
-    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the evidence.' });
-    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the delivery.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the specification' }] });
 
     await ctx.untilTurnEnd();
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('standard quality gate');
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
-    expect(ctx.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]).toMatchObject({
-      approved: {
-        specification: expect.stringContaining('Add a delivery record.'),
-        design: expect.stringContaining('Add the template.'),
-        approval: {
-          source: 'auto',
-          approvedAt: expect.any(String),
-        },
-      },
-      strategy: {
-        strategy: 'controlled_feature',
-        recommendedQualityGate: 'standard',
-      },
-    });
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('complete the delivery record');
   });
 
   it('keeps the delivery record path after manual plan approval', async () => {
@@ -407,11 +365,7 @@ describe('spec coding approval', () => {
     if (documents === null) throw new Error('expected specification documents');
     files.set(
       documents.spec,
-      '# Specification\n\n## Goal\n\nAdd a delivery record.\n\n## Constraints\n\nKeep it project-local.\n\n## Acceptance Criteria\n\n- Record verification results.',
-    );
-    files.set(
-      documents.design,
-      '# Design\n\n## Tasks\n\n- Add the template.\n\n## Risks\n\n- Missing evidence.\n\n## Verification\n\n- Run targeted tests.',
+      '# 交付记录功能\n\n## 目标\n\n增加交付记录。\n\n## 验收标准\n\n- [ ] 记录验证结果。',
     );
 
     const exitPlanModeCall: ToolCall = {
@@ -422,11 +376,11 @@ describe('spec coding approval', () => {
         '{"options":[{"label":"Focused approach","description":"Implement the smallest approved scope."},{"label":"Expanded approach","description":"Implement the broader alternative."}]}',
     };
     ctx.mockNextResponse(
-      { type: 'text', text: 'I will submit the design.' },
+      { type: 'text', text: 'I will submit the specification.' },
       exitPlanModeCall,
     );
-    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the evidence.' });
-    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the design' }] });
+    ctx.mockNextResponse({ type: 'text', text: 'I will implement and record the delivery.' });
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'Submit the specification' }] });
 
     const approval = await ctx.takeApprovalRequest();
     approval.respond({ decision: 'approved', selectedLabel: 'Focused approach' });
@@ -434,17 +388,9 @@ describe('spec coding approval', () => {
 
     expect(ctx.agent.planMode.isActive).toBe(false);
     expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(documents.delivery);
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('use SpecDelivery');
-    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Development strategy: controlled_feature');
-    expect(ctx.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY]).toMatchObject({
-      approved: {
-        approval: {
-          source: 'user',
-          approvedAt: expect.any(String),
-          selectedOption: 'Focused approach',
-        },
-      },
-    });
+    expect(toolResultText(ctx.llmCalls[1]!.history)).toContain(
+      'Selected approach: Focused approach',
+    );
   });
 });
 

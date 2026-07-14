@@ -14,6 +14,7 @@ function makeAgent(mode: PermissionMode): {
   const requestApproval = vi.fn(async () => ({ decision: 'approved' }));
   const telemetryTrack = vi.fn();
   const agent = {
+    config: { cwd: '/workspace' },
     planMode: {
       get isActive() {
         return active;
@@ -21,6 +22,7 @@ function makeAgent(mode: PermissionMode): {
       get planFilePath() {
         return '/tmp/kimi-plan.md';
       },
+      resolveSpecRunId: vi.fn(async () => 'current-plan'),
       enter: vi.fn(async () => {
         active = true;
       }),

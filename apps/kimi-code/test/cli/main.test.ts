@@ -236,15 +236,15 @@ describe('main entry command handling', () => {
     const exitCode = await runHandleMainCommand(opts);
 
     expect(exitCode).toBeNull();
-    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: true }));
+    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: false }));
     expect(runUpdatePreflight).toHaveBeenCalledWith('0.0.1-alpha.2', { track: expect.any(Function) });
     expect(mocks.runUpdatePreflight.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.runShell.mock.invocationCallOrder[0]!,
     );
-    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: true }), '0.0.1-alpha.2');
+    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: false }), '0.0.1-alpha.2');
   });
 
-  it('starts interactive sessions in spec plan mode', async () => {
+  it('enables the spec-coding workspace without forcing plan mode', async () => {
     const opts = defaultOpts();
     mocks.validateOptions.mockImplementation((value: CLIOptions) => ({ options: value, uiMode: 'shell' }));
     mocks.runUpdatePreflight.mockResolvedValue('continue');
@@ -253,8 +253,8 @@ describe('main entry command handling', () => {
     const exitCode = await runHandleMainCommand(opts);
 
     expect(exitCode).toBeNull();
-    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: true }));
-    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: true }), '0.0.1-alpha.2');
+    expect(validateOptions).toHaveBeenCalledWith(expect.objectContaining({ plan: false }));
+    expect(runShell).toHaveBeenCalledWith(expect.objectContaining({ plan: false }), '0.0.1-alpha.2');
     expect(process.env[SPEC_CODING_ENV]).toBe('1');
   });
 

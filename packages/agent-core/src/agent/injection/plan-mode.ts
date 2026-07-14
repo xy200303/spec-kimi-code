@@ -85,8 +85,10 @@ function withPlanFileFooter(
   specFilePath: string | undefined,
 ): string {
   if (planFilePath === null || planFilePath.length === 0) return body;
-  const specFile = specFilePath === undefined ? '' : `\nSpecification file: ${specFilePath}`;
-  return `${body}\n\nDesign file: ${planFilePath}${specFile}`;
+  if (specFilePath !== undefined) {
+    return `${body}\n\nSpecification file: ${specFilePath}`;
+  }
+  return `${body}\n\nPlan file: ${planFilePath}`;
 }
 
 function fullReminder(planFilePath: PlanFilePath, specFilePath: string | undefined): string {
@@ -94,11 +96,11 @@ function fullReminder(planFilePath: PlanFilePath, specFilePath: string | undefin
     return inlineFullReminder();
   }
 
-  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification file';
   const writeStep =
     specFilePath === undefined
       ? '4. Write Plan — modify the plan file with Write or Edit. Use Write if the plan file does not exist yet.'
-      : '4. Write Documents — update the specification with the goal, constraints, and acceptance criteria, then write the design with tasks, risks, and verification. Use SpecTaskList to record stable task ids, why each task is needed, its risk, affected files, changed files, and evidence.';
+      : '4. Write Specification — fill in the frontmatter (type, priority, mode), complete the 目标 and 验收标准 sections, and break the work into the 任务清单 checklist. Record defaults you chose without asking in 关键决策; list unresolved high-risk questions in 待确认问题.';
   const body = `Plan mode is active. You MUST NOT make any edits (with the exception of ${writeTarget}) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
 
 Workflow:
@@ -126,7 +128,7 @@ function sparseReminder(planFilePath: PlanFilePath, specFilePath: string | undef
     return inlineSparseReminder();
   }
 
-  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification file';
   const body = `Plan mode still active (see full instructions earlier). Prefer read-only tools except ${writeTarget}. Use Write or Edit to modify those documents. Use Bash only when needed; Bash follows the normal permission mode and rules. Use AskUserQuestion to clarify user preferences when it helps you write a better plan. If the plan has multiple approaches, pass options to ExitPlanMode so the user can choose. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for approval). Never ask about plan approval via text or AskUserQuestion.`;
   return withPlanFileFooter(body, planFilePath, specFilePath);
 }
@@ -136,11 +138,11 @@ function reentryReminder(planFilePath: PlanFilePath, specFilePath: string | unde
     return inlineReentryReminder();
   }
 
-  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification and design files';
+  const writeTarget = specFilePath === undefined ? 'the current plan file' : 'the current specification file';
   const writeStep =
     specFilePath === undefined
       ? '3. If same task: update the existing plan. If different task: replace it with a fresh plan.'
-      : '3. If same task: update the existing specification and design. If different task: replace them with fresh documents.';
+      : '3. If same task: update the existing specification. If different task: replace it with a fresh specification.';
   const body = `Plan mode is active. You MUST NOT make any edits (with the exception of ${writeTarget}) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.
 
 ## Re-entering Plan Mode

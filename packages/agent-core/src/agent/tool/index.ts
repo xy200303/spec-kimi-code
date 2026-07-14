@@ -727,11 +727,6 @@ export class ToolManager {
         goalToolsEnabled && new b.UpdateGoalTool(this.agent),
         this.agent.rpc?.requestQuestion && new b.AskUserQuestionTool(this.agent),
         new b.TodoListTool(this.toolStore),
-        this.agent.experimentalFlags.enabled('spec-coding') && new b.SpecTaskListTool(this.toolStore),
-        this.agent.experimentalFlags.enabled('spec-coding') &&
-          new b.SpecRunTool(this.agent, this.toolStore),
-        this.agent.experimentalFlags.enabled('spec-coding') &&
-          new b.SpecDeliveryTool(this.agent, this.toolStore),
         new b.TaskListTool(background),
         new b.TaskOutputTool(background),
         new b.TaskStopTool(background),

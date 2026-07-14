@@ -49,7 +49,6 @@ import {
 } from './records';
 import { ReplayBuilder, type ReplayBuilderOptions } from './replay';
 import { SkillManager } from './skill';
-import { SpecTaskTracker } from './spec-task-tracker';
 import type { SkillRegistry } from './skill/types';
 import { SwarmMode } from './swarm';
 import { ToolManager } from './tool/index';
@@ -145,7 +144,6 @@ export class Agent {
   readonly swarmMode: SwarmMode;
   readonly usage: UsageRecorder;
   readonly skills: SkillManager | null;
-  readonly specTaskTracker: SpecTaskTracker;
   readonly tools: ToolManager;
   readonly background: BackgroundManager;
   readonly cron: CronManager | null;
@@ -216,7 +214,6 @@ export class Agent {
     this.swarmMode = new SwarmMode(this);
     this.usage = new UsageRecorder(this);
     this.skills = options.skills ? new SkillManager(this, options.skills) : null;
-    this.specTaskTracker = new SpecTaskTracker(this);
     this.tools = new ToolManager(this);
     this.background = new BackgroundManager(
       this,

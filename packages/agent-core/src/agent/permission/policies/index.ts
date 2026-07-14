@@ -16,10 +16,6 @@ import { PlanModeGuardDenyPermissionPolicy } from './plan-mode-guard-deny';
 import { PlanModeToolApprovePermissionPolicy } from './plan-mode-tool-approve';
 import { PreToolCallHookPermissionPolicy } from './pre-tool-call-hook';
 import { SessionApprovalHistoryPermissionPolicy } from './session-approval-history';
-import {
-  SpecTaskHighRiskAskPermissionPolicy,
-  SpecTaskLowRiskApprovePermissionPolicy,
-} from './spec-task-risk';
 import { SwarmModeAgentSwarmApprovePermissionPolicy } from './swarm-mode-agent-swarm-approve';
 import {
   UserConfiguredAllowPermissionPolicy,
@@ -41,9 +37,7 @@ export function createPermissionDecisionPolicies(agent: Agent): PermissionPolicy
     new PlanModeGuardDenyPermissionPolicy(agent),
     // User-configured deny rule matches → deny.
     new UserConfiguredDenyPermissionPolicy(agent),
-    // High-risk active spec tasks always require an explicit approval, including in auto mode.
-    new SpecTaskHighRiskAskPermissionPolicy(agent),
-    // auto mode → approve after system-level high-risk task confirmation.
+    // auto mode → approve.
     new AutoModeApprovePermissionPolicy(agent),
     // Approve-for-session memorized rule matches → approve. Runs before user-configured ask rules so an in-session grant beats a still-matching ask rule on later calls.
     new SessionApprovalHistoryPermissionPolicy(agent),
@@ -63,8 +57,6 @@ export function createPermissionDecisionPolicies(agent: Agent): PermissionPolicy
     new SensitiveFileAccessAskPermissionPolicy(),
     // Access touches .git or a git control-dir path → ask.
     new GitControlPathAccessAskPermissionPolicy(agent),
-    // Low-risk active spec tasks can run without an additional prompt after higher-priority safeguards.
-    new SpecTaskLowRiskApprovePermissionPolicy(agent),
     // yolo mode → approve.
     new YoloModeApprovePermissionPolicy(agent),
     // Swarm mode keeps AgentSwarm available without making it a globally default-approved tool.

@@ -2,19 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'pathe';
 
 import type { Agent } from '..';
-import {
-  isSpecDeliveryContext,
-  SPEC_DELIVERY_STORE_KEY,
-  type SpecDeliveryContext,
-  type SpecStrategyDecision,
-} from '../../tools/builtin/state/spec-delivery';
-import {
-  SPEC_TASK_ACTIVE_STORE_KEY,
-  SPEC_TASK_STORE_KEY,
-  SPEC_TASK_TRACE_STORE_KEY,
-} from '../../tools/builtin/state/spec-task-list';
 import { generateHeroSlug } from '../../utils/hero-slug';
-import { routeSpecDevelopmentStrategy } from './strategy-router';
 
 export type PlanData = null | {
   id: string;
@@ -23,19 +11,19 @@ export type PlanData = null | {
 };
 export type PlanFilePath = string | null;
 
+/**
+ * Project-local spec run documents. A spec run is exactly two files —
+ * `spec.md` (requirements + design + tasks) and `delivery.md` (delivery
+ * record) — inside `specs/<name>/`. Additional design/ or notes/ files are
+ * created by the agent on demand and need no code support.
+ */
 export interface SpecDocumentPaths {
   readonly root: string;
   readonly spec: string;
-  readonly design: string;
   readonly delivery: string;
-  readonly deliveryJson: string;
 }
 
-export const REQUIRED_SPECIFICATION_SECTIONS = [
-  'Goal',
-  'Constraints',
-  'Acceptance Criteria',
-] as const;
+export const REQUIRED_SPECIFICATION_SECTIONS = ['目标', '验收标准'] as const;
 
 export type RequiredSpecificationSection = (typeof REQUIRED_SPECIFICATION_SECTIONS)[number];
 
@@ -45,75 +33,114 @@ export interface SpecificationData {
   readonly missingSections: readonly RequiredSpecificationSection[];
 }
 
-export const REQUIRED_DESIGN_SECTIONS = ['Tasks', 'Risks', 'Verification'] as const;
+const SPEC_NAME_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 
-export type RequiredDesignSection = (typeof REQUIRED_DESIGN_SECTIONS)[number];
+function specTemplate(id: string, date: string): string {
+  return `---
+id: ${id}
+type: feature          # feature | bugfix | optimize | refactor | docs
+status: in_progress    # pending | in_progress | done | cancelled
+priority: p2           # p0 | p1 | p2 | p3
+mode: standard         # prototype | standard | strict（直接执行的任务不写 spec）
+author: user
+created: ${date}
+updated: ${date}
+---
 
-export interface DesignData {
-  readonly path: string;
-  readonly content: string;
-  readonly missingSections: readonly RequiredDesignSection[];
+# <标题>
+
+## 目标
+
+## 验收标准
+
+- [ ]
+
+## 约束条件
+
+## 技术选型
+
+| 组件 | 选择 | 理由 |
+|------|------|------|
+
+## 任务清单
+
+### 进行中
+
+### 已完成
+
+### 待开始
+
+- [ ]
+
+## 风险与应对
+
+| 风险 | 概率 | 影响 | 应对方案 |
+|------|------|------|----------|
+
+## 关键决策
+
+## 待确认问题
+
+## 变更记录
+
+| 时间 | 操作人 | 变更内容 |
+|------|--------|----------|
+| ${date} | user | 初始需求 |
+`;
 }
 
-export const SPEC_QUALITY_GATE_ENV = 'KIMI_CODE_SPEC_QUALITY_GATE';
-export const SPEC_QUALITY_GATES = ['fast', 'standard', 'strict', 'release'] as const;
-export type SpecQualityGate = (typeof SPEC_QUALITY_GATES)[number];
-const DEFAULT_SPEC_QUALITY_GATE: SpecQualityGate = 'standard';
+function deliveryTemplate(id: string): string {
+  return `---
+spec-id: ${id}
+version: 1.0.0
+status: draft          # draft | completed
+completed-at:
+---
 
-const SPEC_TEMPLATE = `# Specification
+# 交付记录
 
-## Goal
+## 实现方案
 
-## Constraints
+### 架构
 
-## Acceptance Criteria
-`;
+### 关键代码逻辑
 
-const DESIGN_TEMPLATE = `# Design
+## 边界条件
 
-## Tasks
+| 场景 | 处理方式 | 验证结果 |
+|------|----------|----------|
 
-## Risks
+## 测试验证
 
-## Verification
-`;
+### 测试策略声明
 
-function deliveryTemplate(qualityGate: SpecQualityGate): string {
-  return `# Delivery Record
+| 项目 | 说明 |
+|------|------|
+| 测试可行性 | |
+| 测试替代方案 | |
+| 单测要求 | |
+| 覆盖率 | |
 
-## Quality Gate
+## 代码评审
 
-${qualityGate}
+| 检查项 | 状态 | 备注 |
+|--------|------|------|
+| 注释完整 | | 关键逻辑有解释，不是每行都注释 |
+| KISS | | 简单清晰，不过度设计 |
+| 组织合理 | | 文件和目录有清晰边界 |
+| 边界清晰 | | 职责明确，依赖关系合理 |
+| 可读性 | | 人类和 AI 都能快速理解 |
+| 复用 | | 优先成熟方案，不重复造轮子 |
+| 测试 | | 有单测报覆盖率，无单测说明原因 |
 
-## Development Strategy
+## 已知问题
 
-## Approval
+## 回滚方案
 
-## Goal
+## 变更文件
 
-## Constraints
-
-## Acceptance Criteria
-
-## Plan
-
-## Tasks
-
-## Activity
-
-## Changes
-
-## Evidence
-
-${qualityGateEvidenceChecklist(qualityGate)}
-
-## Decisions
-
-## Risks
-
-## Open Questions
-
-## Rollback Notes
+| 文件 | 操作 | 行数 | 说明 |
+|------|------|------|------|
 `;
 }
 
@@ -122,13 +149,37 @@ export class PlanMode {
   protected _planId: null | string = null;
   protected _planFilePath: PlanFilePath = null;
   protected _specDocuments: SpecDocumentPaths | null = null;
-  protected _qualityGate: SpecQualityGate | null = null;
-  protected _strategy: SpecStrategyDecision | null = null;
 
   constructor(protected readonly agent: Agent) {}
 
   createPlanId(): string {
     return generateHeroSlug(randomUUID(), new Set());
+  }
+
+  /**
+   * Resolve the spec run directory name: a valid semantic `name` wins;
+   * otherwise fall back to a random hero slug. When `specs/<name>` already
+   * exists, append `-2`, `-3`, … until free.
+   */
+  async resolveSpecRunId(name?: string): Promise<string> {
+    if (name === undefined || !SPEC_NAME_PATTERN.test(name)) {
+      return this.createPlanId();
+    }
+    if (!this.agent.experimentalFlags.enabled('spec-coding')) {
+      return name;
+    }
+    let candidate = name;
+    for (let suffix = 2; ; suffix++) {
+      let exists = false;
+      try {
+        await this.agent.kaos.stat(join(this.agent.config.cwd, 'specs', candidate));
+        exists = true;
+      } catch {
+        exists = false;
+      }
+      if (!exists) return candidate;
+      candidate = `${name}-${suffix}`;
+    }
   }
 
   async enter(id = this.createPlanId(), createFile = false, emitStatus = true): Promise<void> {
@@ -139,9 +190,7 @@ export class PlanMode {
     this._isActive = true;
     this._planId = id;
     this._specDocuments = this.specDocumentsFor(id);
-    this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
-    this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
-    this._strategy = null;
+    this._planFilePath = this._specDocuments?.spec ?? this.planFilePathFor(id);
 
     let enterRecorded = false;
     try {
@@ -151,21 +200,9 @@ export class PlanMode {
       this.agent.records.logRecord({ type: 'plan_mode.enter', id });
       enterRecorded = true;
       if (this._specDocuments !== null) {
-        await this.writeSpecTemplate(this._specDocuments.spec);
-        await this.writeDesignTemplate(planFilePath);
-        await this.writeDeliveryTemplate(
-          this._specDocuments.delivery,
-          this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
-        );
-        this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
-        this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
-        this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
-        this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
-          ...this._specDocuments,
-          qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
-          strategy: undefined,
-          approved: undefined,
-        } satisfies SpecDeliveryContext);
+        const date = new Date().toISOString().slice(0, 10);
+        await this.agent.kaos.writeText(this._specDocuments.spec, specTemplate(id, date));
+        await this.agent.kaos.writeText(this._specDocuments.delivery, deliveryTemplate(id));
       } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
@@ -177,8 +214,6 @@ export class PlanMode {
         this._planId = null;
         this._planFilePath = null;
         this._specDocuments = null;
-        this._qualityGate = null;
-        this._strategy = null;
       }
       throw error;
     }
@@ -195,13 +230,10 @@ export class PlanMode {
     this._isActive = true;
     this._planId = id;
     this._specDocuments = this.specDocumentsFor(id);
-    this._planFilePath = this._specDocuments?.design ?? this.planFilePathFor(id);
-    this._qualityGate = this._specDocuments === null ? null : resolveSpecQualityGate();
-    this._strategy = null;
+    this._planFilePath = this._specDocuments?.spec ?? this.planFilePathFor(id);
   }
 
   cancel(id?: string): void {
-    const hadSpecDocuments = this._specDocuments !== null;
     this.agent.records.logRecord({ type: 'plan_mode.cancel', id });
     this.agent.replayBuilder.push({
       type: 'plan_updated',
@@ -211,14 +243,6 @@ export class PlanMode {
     this._planId = null;
     this._planFilePath = null;
     this._specDocuments = null;
-    this._qualityGate = null;
-    this._strategy = null;
-    if (hadSpecDocuments) {
-      this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
-      this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
-      this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
-      this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, null);
-    }
     this.agent.emitStatusUpdated();
   }
 
@@ -227,8 +251,7 @@ export class PlanMode {
     await this.writeEmptyPlanFile(this._planFilePath);
   }
 
-  exit(id?: string, retainSpecRun = true): void {
-    const hadSpecDocuments = this._specDocuments !== null;
+  exit(id?: string): void {
     this.agent.records.logRecord({ type: 'plan_mode.exit', id });
     this.agent.replayBuilder.push({
       type: 'plan_updated',
@@ -238,14 +261,6 @@ export class PlanMode {
     this._planId = null;
     this._planFilePath = null;
     this._specDocuments = null;
-    this._qualityGate = null;
-    this._strategy = null;
-    if (hadSpecDocuments && !retainSpecRun) {
-      this.agent.tools.updateStore(SPEC_TASK_STORE_KEY, []);
-      this.agent.tools.updateStore(SPEC_TASK_ACTIVE_STORE_KEY, null);
-      this.agent.tools.updateStore(SPEC_TASK_TRACE_STORE_KEY, []);
-      this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, null);
-    }
     this.agent.emitStatusUpdated();
   }
 
@@ -261,67 +276,9 @@ export class PlanMode {
     return this._specDocuments;
   }
 
-  get qualityGate(): SpecQualityGate | null {
-    return this._qualityGate;
-  }
-
-  get strategy(): SpecStrategyDecision | null {
-    return this._strategy;
-  }
-
-  async routeSpecStrategy(): Promise<SpecStrategyDecision | null> {
-    const documents = this._specDocuments;
-    if (documents === null) return null;
-    const [specification, design] = await Promise.all([
-      this.agent.kaos.readText(documents.spec),
-      this.agent.kaos.readText(documents.design),
-    ]);
-    const strategy = routeSpecDevelopmentStrategy(specification, design);
-    this._strategy = strategy;
-    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
-      ...documents,
-      qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
-      strategy,
-      approved: { specification, design },
-    } satisfies SpecDeliveryContext);
-    return strategy;
-  }
-
-  clearSpecRunApproval(): void {
-    const documents = this._specDocuments;
-    if (documents === null) return;
-    this._strategy = null;
-    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
-      ...documents,
-      qualityGate: this._qualityGate ?? DEFAULT_SPEC_QUALITY_GATE,
-      strategy: undefined,
-      approved: undefined,
-    } satisfies SpecDeliveryContext);
-  }
-
-  approveSpecRun(source: 'auto' | 'user', selectedOption?: string): boolean {
-    if (this._specDocuments === null) return true;
-    const context = this.agent.tools.storeData()[SPEC_DELIVERY_STORE_KEY];
-    if (!isSpecDeliveryContext(context) || context.approved === undefined) return false;
-    this.agent.tools.updateStore(SPEC_DELIVERY_STORE_KEY, {
-      ...context,
-      approved: {
-        ...context.approved,
-        approval: {
-          source,
-          approvedAt: new Date().toISOString(),
-          selectedOption,
-        },
-      },
-    } satisfies SpecDeliveryContext);
-    return true;
-  }
-
   get writableFilePaths(): readonly string[] {
     if (this._planFilePath === null) return [];
-    return this._specDocuments === null
-      ? [this._planFilePath]
-      : [this._specDocuments.spec, this._specDocuments.design];
+    return this._specDocuments === null ? [this._planFilePath] : [this._specDocuments.spec];
   }
 
   async data(): Promise<PlanData> {
@@ -356,32 +313,9 @@ export class PlanMode {
     };
   }
 
-  async designData(): Promise<DesignData | null> {
-    if (this._specDocuments === null) return null;
-    const data = await this.data();
-    if (data === null) return null;
-    return {
-      path: data.path,
-      content: data.content,
-      missingSections: missingDesignSections(data.content),
-    };
-  }
-
   private async writeEmptyPlanFile(path: string): Promise<void> {
     await this.ensurePlanDirectory(path);
     await this.agent.kaos.writeText(path, '');
-  }
-
-  private async writeSpecTemplate(path: string): Promise<void> {
-    await this.agent.kaos.writeText(path, SPEC_TEMPLATE);
-  }
-
-  private async writeDesignTemplate(path: string): Promise<void> {
-    await this.agent.kaos.writeText(path, DESIGN_TEMPLATE);
-  }
-
-  private async writeDeliveryTemplate(path: string, qualityGate: SpecQualityGate): Promise<void> {
-    await this.agent.kaos.writeText(path, deliveryTemplate(qualityGate));
   }
 
   private async ensurePlanDirectory(path: string): Promise<void> {
@@ -405,9 +339,7 @@ export class PlanMode {
     return {
       root,
       spec: join(root, 'spec.md'),
-      design: join(root, 'design.md'),
       delivery: join(root, 'delivery.md'),
-      deliveryJson: join(root, 'delivery.json'),
     };
   }
 }
@@ -416,30 +348,6 @@ export function missingSpecificationSections(
   content: string,
 ): readonly RequiredSpecificationSection[] {
   return missingMarkdownSections(content, REQUIRED_SPECIFICATION_SECTIONS);
-}
-
-export function missingDesignSections(content: string): readonly RequiredDesignSection[] {
-  return missingMarkdownSections(content, REQUIRED_DESIGN_SECTIONS);
-}
-
-export function resolveSpecQualityGate(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): SpecQualityGate {
-  const value = env[SPEC_QUALITY_GATE_ENV]?.trim().toLowerCase();
-  return SPEC_QUALITY_GATES.find((qualityGate) => qualityGate === value) ?? DEFAULT_SPEC_QUALITY_GATE;
-}
-
-function qualityGateEvidenceChecklist(qualityGate: SpecQualityGate): string {
-  switch (qualityGate) {
-    case 'fast':
-      return '- [ ] Relevant validation\n- [ ] Diff review';
-    case 'standard':
-      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review';
-    case 'strict':
-      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review\n- [ ] Critical-path verification\n- [ ] Edge-case verification';
-    case 'release':
-      return '- [ ] Relevant tests\n- [ ] Typecheck or build\n- [ ] Lint or format check\n- [ ] Diff review\n- [ ] Critical-path verification\n- [ ] Edge-case verification\n- [ ] Release build or package verification\n- [ ] Release-note review';
-  }
 }
 
 function missingMarkdownSections<T extends string>(
@@ -457,7 +365,20 @@ function missingMarkdownSections<T extends string>(
       .slice(headingIndex + 1, nextHeadingIndex === -1 ? undefined : nextHeadingIndex)
       .join('\n')
       .trim();
-    return sectionContent.length === 0;
+    // A checklist placeholder (`- [ ]`) or empty table alone does not count as
+    // filled content.
+    const meaningful = sectionContent
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (trimmed.length === 0) return false;
+        if (/^- \[ \]$/.test(trimmed)) return false;
+        if (/^\|[\s|:-]*\|$/.test(trimmed)) return false;
+        return true;
+      })
+      .join('\n')
+      .trim();
+    return meaningful.length === 0;
   });
 }
 

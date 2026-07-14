@@ -58,9 +58,9 @@ function writesOnlyPlanFiles(
 }
 
 function planModeWriteDeniedMessage(writableFilePaths: readonly string[]): string {
-  const paths = writableFilePaths.length === 0 ? '(no writable planning documents selected yet)' : writableFilePaths.join(', ');
+  const paths = writableFilePaths.length === 0 ? '(no plan file selected yet)' : writableFilePaths.join(', ');
   return (
-    `Plan mode is active. You may only write to the current planning documents: ${paths}. ` +
+    `Plan mode is active. You may only write to the current plan file: ${paths}. ` +
     'Call ExitPlanMode to exit plan mode before editing other files.'
   );
 }

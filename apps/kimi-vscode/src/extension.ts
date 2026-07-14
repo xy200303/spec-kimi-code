@@ -82,7 +82,7 @@ class SpecRunsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
         .filter(([, type]) => type === vscode.FileType.File)
         .map(([name]) => name),
     );
-    return ['spec.md', 'design.md', 'delivery.md', 'delivery.json']
+    return ['spec.md', 'delivery.md']
       .filter((name) => documentNames.has(name))
       .map((name) => {
         const uri = vscode.Uri.joinPath(run, name);
