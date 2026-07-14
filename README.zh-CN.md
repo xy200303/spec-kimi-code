@@ -16,16 +16,16 @@ Spec Kimi 保留上游的终端 Agent 基础能力，并把开发过程从非结
 
 ---
 
-## 分发方式
+## 安装
 
-本仓库不提供上游下载链接、Homebrew 命令或上游 npm 仓库安装命令。请只安装本项目构建并交付的 `.tgz` 包：
+从 npm 安装（需要 Node.js >= 24.15.0 已在 `PATH` 中）：
 
 ```sh
-npm install -g /absolute/path/to/spec-kimi-<version>.tgz
+npm install -g @dev_xiaoyun/spec-kimi
 spec-kimi --version
 ```
 
-运行前需要确保 Node.js 已在 `PATH` 中。该包用于本地或受控分发，不能用上游包或上游安装器替代。
+请不要使用上游 `kimi` 的下载链接、Homebrew 命令或上游 npm 包来安装本发行版。
 
 ## 与上游 kimi-code 的区别
 
