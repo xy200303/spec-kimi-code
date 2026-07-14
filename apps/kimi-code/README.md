@@ -1,19 +1,19 @@
 # Spec Kimi CLI
 
-> A spec-driven secondary development based on [xy200303/kimi-code](https://github.com/xy200303/kimi-code/tree/feature/spec-coding-tool).
+> A spec-driven fork of [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code).
 
 This package retains the upstream Kimi Code CLI foundation while making the interactive development path specification-first. Its executable is `spec-kimi`, not `kimi`.
 
-## Local distribution only
+## Install
 
-Do not use upstream installers, Homebrew formulas, or upstream npm registry commands for this distribution. Install the `.tgz` artifact produced by this project instead:
+Install from npm (Node.js >= 24.15.0 must be on `PATH`):
 
 ```sh
-npm install -g /absolute/path/to/spec-kimi-<version>.tgz
+npm install -g @dev_xiaoyun/spec-kimi
 spec-kimi --version
 ```
 
-Node.js 24.15.0 or later must be available on `PATH`. The package name remains compatible with the upstream workspace for build purposes; the artifact and `spec-kimi` binary identify this distribution.
+Do not use upstream `kimi` installers, Homebrew formulas, or the upstream npm package for this distribution.
 
 ## Spec-first workflow
 

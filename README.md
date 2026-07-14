@@ -16,16 +16,16 @@ The executable for this distribution is `spec-kimi`. It is intentionally differe
 
 ---
 
-## Distribution
+## Install
 
-This repository does not provide upstream download links, Homebrew commands, or upstream registry installation commands. Install only the `.tgz` artifact produced by this project:
+Install from npm (Node.js >= 24.15.0 must be on `PATH`):
 
 ```sh
-npm install -g /absolute/path/to/spec-kimi-<version>.tgz
+npm install -g @dev_xiaoyun/spec-kimi
 spec-kimi --version
 ```
 
-The Node.js runtime must be available on `PATH` before running the command. The package is intended for local or controlled distribution; do not substitute an upstream package or installer for this artifact.
+Do not use upstream `kimi` installers, Homebrew formulas, or the upstream npm package for this distribution.
 
 ## Differences from upstream kimi-code
 
