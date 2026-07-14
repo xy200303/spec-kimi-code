@@ -46,7 +46,7 @@ export function registerRotateTokenCommand(server: Command): void {
               frag === ''
                 ? chalk.hex(darkColors.accent)(base)
                 : chalk.hex(darkColors.accent)(base) + chalk.hex(darkColors.textDim)(frag);
-            process.stdout.write(`  ${chalk.dim(label)}${rendered}\n`);
+            process.stdout.write(`  ${chalk.hex(darkColors.textDim)(label)}${rendered}\n`);
           }
         }
       } catch (error) {

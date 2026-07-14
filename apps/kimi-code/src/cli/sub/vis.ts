@@ -1,4 +1,4 @@
-﻿/**
+/**
  * `spec-kimi vis` sub-command.
  *
  * CLI glue only: resolves the kimi home, starts the in-process session

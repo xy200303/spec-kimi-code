@@ -1,4 +1,4 @@
-﻿/**
+/**
  * `kimi provider` sub-command 鈥?non-interactive provider management.
  *
  * Mirrors the TUI `/provider` flow (apps/kimi-code/src/tui/commands/provider.ts)

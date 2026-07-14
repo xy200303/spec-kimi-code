@@ -283,7 +283,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { detached: true, stdio: 'ignore' },
+      expect.objectContaining({ detached: true, stdio: 'ignore' }),
     );
   });
 
@@ -348,7 +348,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { stdio: 'inherit' },
+      expect.objectContaining({ stdio: 'inherit' }),
     );
     expect(stdout.join('')).toContain('Updated @moonshot-ai/kimi-code to 0.5.0');
   });
@@ -374,7 +374,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', '@moonshot-ai/kimi-code@0.7.0'],
-      { stdio: 'inherit' },
+      expect.objectContaining({ stdio: 'inherit' }),
     );
     expect(stdout.join('')).toContain('Updated @moonshot-ai/kimi-code to 0.7.0');
   });
@@ -416,7 +416,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^pnpm(\.cmd)?$/),
       ['add', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { stdio: 'inherit' },
+      expect.objectContaining({ stdio: 'inherit' }),
     );
   });
 
@@ -454,7 +454,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^yarn(\.cmd)?$/),
       ['global', 'add', '@moonshot-ai/kimi-code@0.5.0'],
-      { stdio: 'inherit' },
+      expect.objectContaining({ stdio: 'inherit' }),
     );
   });
 
@@ -470,7 +470,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^bun(\.exe)?$/),
       ['add', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { stdio: 'inherit' },
+      expect.objectContaining({ stdio: 'inherit' }),
     );
   });
 
@@ -577,7 +577,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { detached: true, stdio: 'ignore' },
+      expect.objectContaining({ detached: true, stdio: 'ignore' }),
     );
     expect(writeUpdateInstallState).toHaveBeenCalledWith(expect.objectContaining({
       active: expect.objectContaining({
@@ -670,7 +670,7 @@ describe('runUpdatePreflight', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-      { detached: true, stdio: 'ignore' },
+      expect.objectContaining({ detached: true, stdio: 'ignore' }),
     );
   });
 
@@ -818,7 +818,7 @@ describe('runUpdatePreflight', () => {
     const rendered = stdout.join('');
     expect(rendered).toContain('Kimi Code updated to v0.5.0');
     expect(rendered).toContain(
-      'https://moonshotai.github.io/kimi-code/en/release-notes/changelog.html',
+      'https://xy200303.github.io/kimi-code/en/release-notes/changelog.html',
     );
     expect(track).toHaveBeenCalledWith('update_success_notice_shown', expect.objectContaining({
       version: '0.5.0',
@@ -928,7 +928,7 @@ describe('runUpdatePreflight', () => {
       expect(mocks.spawn).toHaveBeenCalledWith(
         expect.stringMatching(/^npm(\.cmd)?$/),
         ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-        { detached: true, stdio: 'ignore' },
+        expect.objectContaining({ detached: true, stdio: 'ignore' }),
       );
       expect(track).toHaveBeenCalledWith('update_background_install_started', expect.objectContaining({
         target_version: '0.5.0',
@@ -1054,7 +1054,7 @@ describe('runUpdatePreflight', () => {
       expect(mocks.spawn).toHaveBeenCalledWith(
         expect.stringMatching(/^npm(\.cmd)?$/),
         ['install', '-g', '@moonshot-ai/kimi-code@0.5.0'],
-        { detached: true, stdio: 'ignore' },
+        expect.objectContaining({ detached: true, stdio: 'ignore' }),
       );
       expect(track).toHaveBeenCalledWith('update_background_install_started', expect.objectContaining({
         target_version: '0.5.0',

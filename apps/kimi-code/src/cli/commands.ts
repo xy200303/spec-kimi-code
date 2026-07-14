@@ -30,7 +30,7 @@ export function createProgram(
     .configureHelp({ helpWidth: 100 })
     .helpOption('-h, --help', 'Show help.')
     .usage('[options] [command]')
-    .addHelpText('after', '\nDocumentation:        https://moonshotai.github.io/kimi-code/\n');
+    .addHelpText('after', '\nDocumentation:        https://xy200303.github.io/kimi-code/\n');
 
   program
     .addOption(

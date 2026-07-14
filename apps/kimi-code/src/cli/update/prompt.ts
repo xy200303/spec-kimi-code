@@ -14,7 +14,7 @@ import {
 
 import { type InstallSource, type UpdateTarget } from './types';
 
-export const CHANGELOG_URL = 'https://moonshotai.github.io/kimi-code/en/release-notes/changelog.html';
+export const CHANGELOG_URL = 'https://xy200303.github.io/kimi-code/en/release-notes/changelog.html';
 
 export type InstallPromptChoiceValue = 'install' | 'skip';
 

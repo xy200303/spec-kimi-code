@@ -86,14 +86,14 @@ export interface AgentOptions {
   readonly toolServices?: ToolServices;
   readonly compactionStrategy?: CompactionStrategy;
   readonly microCompaction?: Partial<MicroCompactionConfig>;
-  readonly modelProvider?: ModelProvider | undefined;
-  readonly subagentHost?: SessionSubagentHost | undefined;
+  readonly modelProvider?: ModelProvider;
+  readonly subagentHost?: SessionSubagentHost;
   readonly skills?: SkillRegistry;
   readonly mcp?: McpConnectionManager;
   readonly hookEngine?: HookEngine;
-  readonly permission?: PermissionManagerOptions | undefined;
+  readonly permission?: PermissionManagerOptions;
   readonly log?: Logger;
-  readonly telemetry?: TelemetryClient | undefined;
+  readonly telemetry?: TelemetryClient;
   readonly pluginSessionStarts?: readonly EnabledPluginSessionStart[];
   readonly pluginCommands?: readonly PluginCommandDef[];
   readonly experimentalFlags?: ExperimentalFlagResolver;
@@ -101,7 +101,7 @@ export interface AgentOptions {
   readonly imageLimits?: ImageLimits;
   readonly replay?: ReplayBuilderOptions;
   readonly additionalDirs?: readonly string[];
-  readonly systemPromptContextProvider?: (() => Promise<PreparedSystemPromptContext>) | undefined;
+  readonly systemPromptContextProvider?: () => Promise<PreparedSystemPromptContext>;
 }
 
 export class Agent {

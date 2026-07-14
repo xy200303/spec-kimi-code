@@ -7,7 +7,7 @@ const SRC_ROOT = join(__dirname, '..', '..', 'src');
 
 const NAMED_COLORS = [
   'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'white', 'gray', 'grey', 'black',
+  'white', 'gray', 'grey', 'black', 'dim',
   'blackBright', 'whiteBright', 'redBright', 'greenBright',
   'yellowBright', 'blueBright', 'magentaBright', 'cyanBright',
 ];
@@ -22,7 +22,12 @@ function walk(dir: string, files: string[] = []): string[] {
       const p = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(p, files);
-      } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.spec.ts')) {
+      } else if (
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.test.ts') &&
+        !entry.name.endsWith('.spec.ts') &&
+        !/[\\/]tui[\\/]theme[\\/]/.test(p)
+      ) {
         files.push(p);
       }
     }

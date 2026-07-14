@@ -1,4 +1,4 @@
-﻿/**
+/**
  * `kimi provider` CLI unit tests. The handlers receive an injected `getHarness`
  * + capturing stdout/stderr, so we test the wiring end-to-end without booting
  * a real harness or hitting the network.

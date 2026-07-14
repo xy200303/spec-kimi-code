@@ -1,4 +1,4 @@
-﻿/**
+/**
  * `kimi vis`
  *
  * Verifies the CLI layer for the session visualizer: home + auto-port
