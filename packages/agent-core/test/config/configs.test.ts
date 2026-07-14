@@ -131,6 +131,11 @@ custom_headers = { "X-Search" = "1" }
 base_url = "https://api.kimi.com/coding/v1/fetch"
 api_key = "sk-fetch"
 
+[services.image_generation]
+base_url = "https://api.kimi.com/coding/v1/images"
+api_key = "sk-image"
+custom_headers = { "X-Image" = "1" }
+
 [notifications]
 claim_stale_after_ms = 15000
 `;
@@ -206,6 +211,11 @@ describe('harness config TOML loader', () => {
     ]);
     expect(config.services?.moonshotSearch?.customHeaders).toEqual({ 'X-Search': '1' });
     expect(config.services?.moonshotFetch?.apiKey).toBe('sk-fetch');
+    expect(config.services?.imageGeneration).toMatchObject({
+      baseUrl: 'https://api.kimi.com/coding/v1/images',
+      apiKey: 'sk-image',
+      customHeaders: { 'X-Image': '1' },
+    });
 
     expect('theme' in config).toBe(false);
     expect(config.raw?.['theme']).toBe('dark');

@@ -228,7 +228,15 @@ function formatAutoApprovedPlanForOutput(plan: string, path: string | undefined)
   return `Plan mode deactivated. All tools are now available.\nNote: this plan was auto-approved without user review — the user has NOT explicitly approved it. Follow the user's original instructions on whether to proceed with execution; if they asked you to stop, wait, or only summarize after planning, do not start executing.\n${savedTo}## Plan (auto-approved, not user-reviewed):\n${plan}`;
 }
 
-function formatPlanForOutput(plan: string, path: string | undefined): string {
+export function formatPlanForOutput(
+  plan: string,
+  path: string | undefined,
+  deliveryPath?: string | undefined,
+): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}`;
+  const delivery =
+    deliveryPath === undefined
+      ? ''
+      : `\n\nDuring implementation, keep the task checklist in the specification up to date — checking off a task is the progress record. After implementation and verification, complete the delivery record from its template: ${deliveryPath}`;
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
 }

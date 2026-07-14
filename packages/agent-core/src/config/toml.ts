@@ -639,6 +639,11 @@ function servicesToToml(services: ServicesConfig, rawServices: unknown): Record<
   } else {
     delete out['moonshot_fetch'];
   }
+  if (services.imageGeneration !== undefined) {
+    out['image_generation'] = serviceToToml(services.imageGeneration);
+  } else {
+    delete out['image_generation'];
+  }
   return out;
 }
 

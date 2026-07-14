@@ -7,6 +7,7 @@ import { PluginManager } from '#/plugin';
 import { LocalFetchURLProvider } from '#/tools/providers/local-fetch-url';
 import { MoonshotFetchURLProvider } from '#/tools/providers/moonshot-fetch-url';
 import { MoonshotWebSearchProvider } from '#/tools/providers/moonshot-web-search';
+import { OpenAIImageGenerationProvider } from '#/tools/providers/openai-image-generation';
 import { ImageLimits } from '#/tools/support/image-limits';
 import type { PromisableMethods } from '#/utils/types';
 import { getCoreVersion } from '#/version';
@@ -1158,6 +1159,7 @@ async function createRuntimeConfig(input: {
   const localFetcher = new LocalFetchURLProvider();
   const searchService = input.config.services?.moonshotSearch;
   const fetchService = input.config.services?.moonshotFetch;
+  const imageGenerationService = input.config.services?.imageGeneration;
 
   return {
     urlFetcher:
@@ -1176,6 +1178,14 @@ async function createRuntimeConfig(input: {
             baseUrl: searchService.baseUrl,
             defaultHeaders: input.kimiRequestHeaders,
             ...serviceCredentials(searchService, input.resolveOAuthTokenProvider),
+          }),
+    imageGenerator:
+      imageGenerationService?.baseUrl === undefined
+        ? undefined
+        : new OpenAIImageGenerationProvider({
+            baseUrl: imageGenerationService.baseUrl,
+            defaultHeaders: input.kimiRequestHeaders,
+            ...serviceCredentials(imageGenerationService, input.resolveOAuthTokenProvider),
           }),
   };
 }

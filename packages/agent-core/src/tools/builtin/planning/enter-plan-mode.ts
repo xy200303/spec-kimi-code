@@ -98,7 +98,7 @@ function enteredPlanModeMessage(
     '2. Design a concrete, step-by-step plan.',
     specPath === undefined
       ? '3. Write the plan to the plan file with Write or Edit.'
-      : '3. Fill in the specification: set the frontmatter (type, priority, mode), then complete the 目标 and 验收标准 sections and the task checklist. Question the user only when a requirement is ambiguous AND high-risk; otherwise pick a sensible default and note it in 关键决策.',
+      : '3. Before filling the specification, run the adaptive intent clarification loop if the requirement is ambiguous or complex: ask decisive questions, then present a paraphrase for confirmation. Once confirmed, fill in the frontmatter (type, priority, mode), then complete the 目标 and 验收标准 sections and the task checklist. Question the user only when a requirement is ambiguous AND high-risk; otherwise pick a sensible default and note it in 关键决策.',
     '4. When the plan is ready, call ExitPlanMode for user approval.',
     '',
     specPath === undefined

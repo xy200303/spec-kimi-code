@@ -18,6 +18,7 @@ export * from './goal/create-goal';
 export * from './goal/get-goal';
 export * from './goal/set-goal-budget';
 export * from './goal/update-goal';
+export * from './image/generate-image';
 export * from './planning/enter-plan-mode';
 export * from './planning/exit-plan-mode';
 export * from './select-tools';

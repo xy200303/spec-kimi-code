@@ -756,6 +756,8 @@ export class ToolManager {
           ),
         toolServices?.webSearcher && new b.WebSearchTool(toolServices.webSearcher),
         toolServices?.urlFetcher && new b.FetchURLTool(toolServices.urlFetcher),
+        toolServices?.imageGenerator &&
+          new b.GenerateImageTool(kaos, workspace, toolServices.imageGenerator),
       ]
         .filter((tool) => !!tool)
         .map((tool) => [tool.name, tool] as const),
