@@ -20,6 +20,7 @@ import { InstantiationType } from '#/_base/di/extensions';
 import { LifecycleScope, registerScopedService } from '#/_base/di/scope';
 import {
   DEFAULT_MAX_RETRY_ATTEMPTS,
+  readRetryAfterMs,
   retryBackoffDelays,
   retryErrorFields,
   sleepForRetry,
@@ -95,7 +96,9 @@ export class AgentStepRetryService extends Disposable implements IAgentStepRetry
       return false;
     }
 
-    const delayMs = retryBackoffDelays(maxAttempts)[this.failedAttempts - 1] ?? 0;
+    const error = unwrapErrorCause(context.error);
+    const delayMs =
+      readRetryAfterMs(error) ?? retryBackoffDelays(maxAttempts)[this.failedAttempts - 1] ?? 0;
     this.eventBus.publish({
       type: 'turn.step.retrying',
       turnId: context.turnId,
@@ -105,12 +108,10 @@ export class AgentStepRetryService extends Disposable implements IAgentStepRetry
       nextAttempt: this.failedAttempts + 1,
       maxAttempts,
       delayMs,
-      ...retryErrorFields(unwrapErrorCause(context.error)),
+      ...retryErrorFields(error),
     });
     await sleepForRetry(delayMs, context.signal);
 
-    // The driver is already materialized, so its messages are not appended a
-    // second time; re-running it drives another step over the same context.
     if (context.currentStep?.signal.aborted === true) return false;
     context.retry(driver, { at: 'head' });
     return true;

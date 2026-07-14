@@ -21,13 +21,13 @@ import type {
 import { createDecorator, type ServiceIdentifier } from '#/_base/di/instantiation';
 
 import type { ModelAlias } from '#/app/model/model';
+import { effectiveModelConfig } from '#/app/model/modelAuth';
 import type { ProviderConfig } from '#/app/provider/provider';
 
 export type RefreshProviderModelsScope = 'all' | 'oauth';
 
 export interface RefreshProviderModelsOptions {
   readonly scope?: RefreshProviderModelsScope;
-  /** Refresh only this provider id. When set, `scope` is ignored. */
   readonly providerId?: string;
 }
 
@@ -38,17 +38,6 @@ export interface IModelCatalogService {
   listProviders(): Promise<readonly ProviderCatalogItem[]>;
   getProvider(providerId: string): Promise<ProviderCatalogItem>;
   setDefaultModel(modelId: string): Promise<SetDefaultModelResponse>;
-  /**
-   * Refresh remote model metadata for the configured providers. Defaults to
-   * every refreshable provider (`scope: 'all'`); pass `scope: 'oauth'` for the
-   * managed OAuth provider only, or `providerId` for a single provider. Throws
-   * `provider.not_found` when `providerId` is unknown. Publishes
-   * `event.model_catalog.changed` when the catalog actually changes.
-   *
-   * Only providers with a discoverable catalog endpoint are refreshed
-   * (managed OAuth, open platforms, custom registries); plain API-key
-   * providers have no server-side catalog and are a no-op, matching v1.
-   */
   refreshProviderModels(
     options?: RefreshProviderModelsOptions,
   ): Promise<RefreshProviderModelsResponse>;
@@ -63,12 +52,15 @@ export interface ProviderCredentialState {
 }
 
 export function toProtocolModel(modelId: string, alias: ModelAlias): ModelCatalogItem {
+  const effective = effectiveModelConfig(alias);
   return {
-    provider: alias.provider ?? '',
+    provider: effective.provider ?? '',
     model: modelId,
-    display_name: alias.displayName ?? alias.model ?? modelId,
-    max_context_size: alias.maxContextSize ?? 0,
-    capabilities: alias.capabilities,
+    display_name: effective.displayName ?? effective.model ?? modelId,
+    max_context_size: effective.maxContextSize ?? 0,
+    capabilities: effective.capabilities,
+    support_efforts: effective.supportEfforts,
+    default_effort: effective.defaultEffort,
   };
 }
 

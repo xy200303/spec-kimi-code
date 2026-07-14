@@ -29,12 +29,18 @@ import {
   ITelemetryService,
   applyPromptMetadataUpdate,
   buildImageCompressionCaption,
+  buildUnsupportedImageNotice,
   compressBase64ForModel,
   compressImageForModel,
+  decodeBase64Prefix,
   isError2,
   Error2,
+  isModelAcceptedImageMime,
+  normalizeImageMime,
   persistOriginalImage,
+  resolveEffectiveImageMime,
   sessionMediaOriginalsDir,
+  unsupportedImageMimeFromUrl,
   type GetResult,
   type ImageCompressionTelemetry,
   type ISessionScopeHandle,
@@ -53,6 +59,7 @@ import {
 import { z } from 'zod';
 
 import { errEnvelope, okEnvelope } from '../envelope';
+import { requestLog } from '../lib/requestLog';
 import { defineRoute } from '../middleware/defineRoute';
 import { ensureMainAgent, MAIN_AGENT_ID } from '../transport/mainAgent';
 import { parseActionSuffix } from './action-suffix';
@@ -116,7 +123,7 @@ async function resolvePromptFromSession(session: ISessionScopeHandle, agentId?: 
   const agent =
     agentId === undefined || agentId === MAIN_AGENT_ID
       ? await ensureMainAgent(session)
-      : session.accessor.get(IAgentLifecycleService).getHandle(agentId);
+      : session.accessor.get(IAgentLifecycleService).get(agentId);
   if (agent === undefined) {
     throw new Error2('agent.not_found', `agent ${agentId} does not exist`);
   }
@@ -146,7 +153,7 @@ export function registerPromptsRoutes(app: PromptRouteHost, core: Scope): void {
         const result = projectPromptList((await resolvePrompt(core, session_id)).prompt.list());
         reply.send(okEnvelope(result, req.id));
       } catch (error) {
-        sendMappedError(reply, req.id, error);
+        sendMappedError(reply, req, error);
       }
     },
   );
@@ -209,7 +216,7 @@ export function registerPromptsRoutes(app: PromptRouteHost, core: Scope): void {
         } });
         reply.send(okEnvelope(projectPromptHandle(handle), req.id));
       } catch (error) {
-        sendMappedError(reply, req.id, error);
+        sendMappedError(reply, req, error);
       }
     },
   );
@@ -238,7 +245,7 @@ export function registerPromptsRoutes(app: PromptRouteHost, core: Scope): void {
         await resolved.prompt.steer(req.body.prompt_ids);
         reply.send(okEnvelope({ steered: true, prompt_ids: [...req.body.prompt_ids] }, req.id));
       } catch (error) {
-        sendMappedError(reply, req.id, error);
+        sendMappedError(reply, req, error);
       }
     },
   );
@@ -275,13 +282,14 @@ export function registerPromptsRoutes(app: PromptRouteHost, core: Scope): void {
         const resolved = await resolvePrompt(core, session_id);
         if (parsed.action === 'abort') {
           resolved.prompt.abort(parsed.id);
+          requestLog(req)?.info({ session_id, prompt_id: parsed.id }, 'prompt aborted');
           reply.send(okEnvelope({ aborted: true }, req.id));
         } else {
           await resolved.prompt.steer([parsed.id]);
           reply.send(okEnvelope({ steered: true, prompt_ids: [parsed.id] }, req.id));
         }
       } catch (error) {
-        sendMappedError(reply, req.id, error);
+        sendMappedError(reply, req, error);
       }
     },
   );
@@ -378,7 +386,22 @@ async function resolvePromptMediaFiles(
     // Inline base64 image: compress the payload in place. This mirrors the v1
     // server path for REST clients that submit an image without uploading it.
     if (part.type === 'image' && part.source.kind === 'base64') {
-      const compressed = await compressBase64ForModel(part.source.data, part.source.media_type, {
+      // Formats the provider cannot accept must never enter the session
+      // history — one unsupported image_url makes every later request fail.
+      // The bytes are authoritative: an image labeled image/png that is
+      // actually AVIF is gated on the sniffed format, not the label. Drop
+      // the image; a notice stands in so the model knows what happened.
+      const effectiveMime = resolveEffectiveImageMime(
+        part.source.media_type,
+        decodeBase64Prefix(part.source.data),
+      );
+      if (!isModelAcceptedImageMime(effectiveMime)) {
+        content.push({ type: 'text', text: buildUnsupportedImageNotice(effectiveMime) });
+        changed = true;
+        continue;
+      }
+      const canonicalMime = normalizeImageMime(effectiveMime);
+      const compressed = await compressBase64ForModel(part.source.data, canonicalMime, {
         telemetry: telemetryFor('prompt_inline'),
       });
       if (compressed.changed) {
@@ -417,6 +440,22 @@ async function resolvePromptMediaFiles(
       continue;
     }
 
+    // Remote image URL: no bytes to sniff, so reject when its path extension
+    // names a format providers reject (e.g. a link ending in `.avif`) — the
+    // notice keeps the URL so the model can still fetch and convert the
+    // image. Extensionless / unknown URLs pass through to the provider and
+    // the 400 recovery. Image+URL parts that pass are re-emitted unchanged.
+    if (part.type === 'image' && part.source.kind === 'url') {
+      const extMime = unsupportedImageMimeFromUrl(part.source.url);
+      if (extMime !== null) {
+        content.push({ type: 'text', text: buildUnsupportedImageNotice(extMime, part.source.url) });
+        changed = true;
+        continue;
+      }
+      content.push(part);
+      continue;
+    }
+
     if ((part.type !== 'image' && part.type !== 'video') || part.source.kind !== 'file') {
       content.push(part);
       continue;
@@ -428,6 +467,18 @@ async function resolvePromptMediaFiles(
       const data = await readFileOrStream(file);
       let mediaType = file.meta.media_type;
       let bytes: Uint8Array = data;
+      // Same format gate as the inline path above, and again the bytes are
+      // authoritative: an upload whose Content-Type lies (AVIF bytes sent
+      // as image/png) becomes a notice instead of an image part.
+      mediaType = resolveEffectiveImageMime(mediaType, data);
+      if (!isModelAcceptedImageMime(mediaType)) {
+        content.push({ type: 'text', text: buildUnsupportedImageNotice(mediaType, file.meta.name) });
+        changed = true;
+        continue;
+      }
+      // Forward the canonical MIME (image/jpg → image/jpeg, case/whitespace)
+      // — strict provider whitelists reject the raw alias.
+      mediaType = normalizeImageMime(mediaType);
       const compressed = await compressImageForModel(data, mediaType, {
         telemetry: telemetryFor('prompt_file'),
       });
@@ -512,9 +563,11 @@ function escapeAttribute(value: string): string {
 
 function sendMappedError(
   reply: { send(payload: unknown): unknown },
-  requestId: string,
+  req: { id: string },
   err: unknown,
 ): void {
+  const requestId = req.id;
+  const log = requestLog(req);
   if (isError2(err)) {
     switch (err.code) {
       case 'session.not_found':
@@ -556,6 +609,7 @@ function sendMappedError(
       case 'auth.token_missing': {
         const details = authProviderDetails(err);
         if (details === undefined) {
+          log?.error({ err }, 'prompt request failed');
           reply.send(
             errEnvelope(
               ErrorCode.INTERNAL_ERROR,
@@ -578,6 +632,7 @@ function sendMappedError(
       case 'auth.token_unauthorized': {
         const details = authProviderDetails(err);
         if (details === undefined) {
+          log?.error({ err }, 'prompt request failed');
           reply.send(
             errEnvelope(
               ErrorCode.INTERNAL_ERROR,
@@ -609,6 +664,7 @@ function sendMappedError(
         return;
     }
   }
+  log?.error({ err }, 'prompt request failed');
   reply.send(
     errEnvelope(
       ErrorCode.INTERNAL_ERROR,

@@ -87,10 +87,9 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   constructor(private readonly agent: Agent) {}
 
   async resolveExecution(args: ExitPlanModeInput): Promise<ToolExecution> {
-    const display = await this.resolvePlanReviewDisplay(args);
     return {
       description: 'Presenting plan and exiting plan mode',
-      display,
+      display: await this.resolvePlanReviewDisplay(args),
       approvalRule: this.name,
       execute: () => this.execution(args),
     };
@@ -100,7 +99,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     args: ExitPlanModeInput,
   ): Promise<ToolInputDisplay | undefined> {
     if (!this.agent.planMode.isActive) return undefined;
-    if (!(await this.hasCompletePlanningDocuments())) return undefined;
     let data: PlanData;
     try {
       data = await this.agent.planMode.data();
@@ -135,19 +133,28 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
       has_options: args.options !== undefined && args.options.length >= 2,
     });
 
-    const deliveryPath = this.agent.planMode.specDocuments?.delivery;
     const failed = this.exitPlanMode();
     if (failed !== undefined) return failed;
 
-    this.agent.telemetry.track('plan_resolved', { outcome: 'auto_approved' });
+    // Reaching `execute` means no interactive review ask intercepted the
+    // call. In auto permission mode the approval is automatic, so the
+    // output must not read as if the user had approved the plan. In
+    // manual / yolo modes the review-ask policy owns the user-facing
+    // result; the only way `execute` still runs there is a configured or
+    // session allow/ask rule — an explicit user decision that keeps the
+    // user-approved wording.
+    if (this.agent.permission.mode === 'auto') {
+      this.agent.telemetry.track('plan_resolved', { outcome: 'auto_approved' });
+      return {
+        isError: false,
+        output: `Exited plan mode. ${formatAutoApprovedPlanForOutput(resolvedPlan.plan, resolvedPlan.path)}`,
+      };
+    }
 
+    this.agent.telemetry.track('plan_resolved', { outcome: 'approved' });
     return {
       isError: false,
-      output: `Exited plan mode. ${formatPlanForOutput(
-        resolvedPlan.plan,
-        resolvedPlan.path,
-        deliveryPath,
-      )}`,
+      output: `Exited plan mode. ${formatPlanForOutput(resolvedPlan.plan, resolvedPlan.path)}`,
     };
   }
 
@@ -164,9 +171,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
   }
 
   private async resolvePlan(): Promise<ResolvePlanResult> {
-    const specificationError = await this.resolveSpecification();
-    if (specificationError !== undefined) return { ok: false, error: specificationError };
-
     let source: ExitPlanModePlanSource | null;
     try {
       const data = await this.agent.planMode.data();
@@ -199,33 +203,6 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
       },
     };
   }
-
-  private async hasCompletePlanningDocuments(): Promise<boolean> {
-    try {
-      const specification = await this.agent.planMode.specificationData();
-      return specification === null || specification.missingSections.length === 0;
-    } catch {
-      return false;
-    }
-  }
-
-  private async resolveSpecification(): Promise<ExecutableToolResult | undefined> {
-    let specification;
-    try {
-      specification = await this.agent.planMode.specificationData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to read specification file.';
-      return { isError: true, output: `Failed to read specification file: ${message}` };
-    }
-    if (specification === null || specification.missingSections.length === 0) return undefined;
-
-    return {
-      isError: true,
-      output:
-        `Specification is incomplete. Complete ${specification.missingSections.join(', ')} in ` +
-        `${specification.path} before requesting approval.`,
-    };
-  }
 }
 
 function hasUniqueOptionLabels(options: readonly ExitPlanModeOption[]): boolean {
@@ -246,15 +223,12 @@ function normalizeOptionLabel(label: string): string {
   return label.trim().toLowerCase();
 }
 
-export function formatPlanForOutput(
-  plan: string,
-  path: string | undefined,
-  deliveryPath: string | undefined,
-): string {
+function formatAutoApprovedPlanForOutput(plan: string, path: string | undefined): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
-  const delivery =
-    deliveryPath === undefined
-      ? ''
-      : `\n\nDuring implementation, keep the task checklist in the specification up to date — checking off a task is the progress record. After implementation and verification, complete the delivery record from its template: ${deliveryPath}`;
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
+  return `Plan mode deactivated. All tools are now available.\nNote: this plan was auto-approved without user review — the user has NOT explicitly approved it. Follow the user's original instructions on whether to proceed with execution; if they asked you to stop, wait, or only summarize after planning, do not start executing.\n${savedTo}## Plan (auto-approved, not user-reviewed):\n${plan}`;
+}
+
+function formatPlanForOutput(plan: string, path: string | undefined): string {
+  const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}`;
 }

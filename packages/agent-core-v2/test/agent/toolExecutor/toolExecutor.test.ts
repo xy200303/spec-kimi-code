@@ -5,21 +5,25 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SyncDescriptor } from '#/_base/di/descriptors';
 import { DisposableStore } from '#/_base/di/lifecycle';
 import { createServices, type TestInstantiationService } from '#/_base/di/test';
-import { ToolAccesses } from '#/agent/tool/tool-access';
-import type { ExecutableTool, ExecutableToolContext, ExecutableToolResult, ToolExecution, ToolResult, ToolUpdate } from '#/agent/tool/toolContract';
+import {
+  ToolAccesses,
+  type ExecutableTool,
+  type ExecutableToolContext,
+  type ExecutableToolResult,
+  type ToolExecution,
+  type ToolResult,
+  type ToolUpdate,
+} from '#/tool/toolContract';
 import { IAgentToolExecutorService } from '#/agent/toolExecutor/toolExecutor';
 import { AgentToolExecutorService, parseToolCallArguments } from '#/agent/toolExecutor/toolExecutorService';
 import { IAgentToolResultTruncationService } from '#/agent/toolResultTruncation/toolResultTruncation';
 import { IAgentToolRegistryService } from '#/agent/toolRegistry/toolRegistry';
 import { AgentToolRegistryService } from '#/agent/toolRegistry/toolRegistryService';
-import { IAgentWireRecordService } from '#/agent/wireRecord/wireRecord';
-import { IAgentWireService } from '#/wire/tokens';
-import { WireService } from '#/wire/wireServiceImpl';
 import { IEventBus } from '#/app/event/eventBus';
 import { ITelemetryService } from '#/app/telemetry/telemetry';
-import { stubWireRecord } from '../contextMemory/stubs';
 import { registerLogServices } from '../../_base/log/stubs';
 import { recordingTelemetry, type TelemetryRecord } from '../../app/telemetry/stubs';
+import { registerTestAgentWireServices } from '../../wire/stubs';
 
 type ToolExecutorEvent =
   | { readonly type: 'tool.result'; readonly toolCallId: string; readonly result: ToolResult };
@@ -41,13 +45,9 @@ beforeEach(() => {
   truncateForModel = async (input) => input.result;
   ix = createServices(disposables, {
     additionalServices: (reg) => {
+      registerTestAgentWireServices(reg, 'wire/tool-executor');
       reg.define(IAgentToolRegistryService, AgentToolRegistryService);
       reg.define(IAgentToolExecutorService, AgentToolExecutorService);
-      reg.defineInstance(IAgentWireRecordService, stubWireRecord());
-      reg.defineInstance(
-        IAgentWireService,
-        disposables.add(new WireService({ logScope: 'wire', logKey: 'tool-executor' })),
-      );
       reg.defineInstance(ITelemetryService, recordingTelemetry(telemetryEvents));
       reg.defineInstance(IAgentToolResultTruncationService, {
         _serviceBrand: undefined,
@@ -110,8 +110,6 @@ describe('AgentToolExecutorService', () => {
   it('tags tool_call telemetry with recorded dup types, defaulting to normal', async () => {
     const tool = new TestTool('echo');
     registry.register(tool);
-    // Dup types are recorded mid-execution through the will-hook (the dedupe
-    // plugin's path), so tag from a hook like production does.
     let tag = true;
     executor.hooks.onBeforeExecuteTool.register('test-dup-tag', async (ctx, next) => {
       if (tag && ctx.toolCall.id === 'call_dup') executor.recordDupType('call_dup', 'cross_step');
@@ -132,7 +130,6 @@ describe('AgentToolExecutorService', () => {
       properties: expect.objectContaining({ tool_call_id: 'call_dup', dup_type: 'cross_step' }),
     });
 
-    // Entries are consumed on read, not sticky.
     tag = false;
     await execute([toolCall('call_dup', 'echo', { text: 'c' })]);
     expect(telemetryEvents).toContainEqual({
@@ -314,8 +311,6 @@ describe('AgentToolExecutorService', () => {
       },
     ]);
 
-    // The trailing comma is NOT repaired: args fall back to `{}`, which fails
-    // schema validation, so the tool is never invoked.
     expect(tool.calls).toEqual([]);
     expect(results).toEqual([
       expect.objectContaining({
@@ -696,8 +691,6 @@ describe('AgentToolExecutorService', () => {
 
     expect(results).toHaveLength(1);
     expect(results[0]!.output).toBe('ack');
-    // The executor only threads `delivery`; an L4 hook (AgentPromptService) is
-    // what consumes and strips it — that hook is not registered in this unit test.
     expect(results[0]!.delivery).toMatchObject({
       kind: 'steer',
       message: { content: [{ type: 'text', text: 'injected' }] },

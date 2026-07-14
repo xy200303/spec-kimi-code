@@ -2,15 +2,16 @@
  * `activity` domain (L4) — Agent / Session activity kernel contracts.
  *
  * Defines the authoritative activity state machines shared by the Agent and
- * Session scopes. `IAgentActivityService` is the Agent-scope lane machine: it
+ * Session scopes. `IAgentActivityService` is the Agent-scope activity machine: it
  * owns turn admission (`begin`/`tryBegin`), cancellation, background-activity
- * registration and disposal settlement, and is the sole dispatcher of the
- * `activityLane` wire Model (`activityOps`). `ISessionActivityKernel` is the
+ * registration, disposal settlement, and the live activity projection emitted
+ * as `agent.activity.updated`. `ISessionActivityKernel` is the
  * Session-scope lifecycle lane + admission table that the Agent kernel consults
  * synchronously on every `begin` (child-injects-parent), so admission stays
  * atomic inside a single event-loop turn. The `ActivityLease` returned by
- * `begin` carries the turn's `AbortSignal` and is the only path back to `idle`
- * (`lease.end`). Multi-scope domain: `IAgentActivityService` bound at Agent
+ * `begin` carries the turn's `AbortSignal`; `lease.end` releases the active
+ * turn independently of the Agent lifecycle. Multi-scope domain:
+ * `IAgentActivityService` bound at Agent
  * scope, `ISessionActivityKernel` bound at Session scope.
  */
 
@@ -19,12 +20,10 @@ import type { IDisposable } from '#/_base/di/lifecycle';
 import type { PromptOrigin } from '#/agent/contextMemory/types';
 import type { TurnEndReason } from '@moonshot-ai/protocol';
 
-export type AgentLane = 'initializing' | 'idle' | 'turn' | 'disposing' | 'disposed';
+export type AgentLifecycleState = 'initializing' | 'ready' | 'disposing' | 'disposed';
 
 export interface BeginOptions {
-  /** Turn source, forwarded to the lease and the snapshot; admission is origin-agnostic. */
   readonly origin?: PromptOrigin;
-  /** Stable id reserved by the loop when the turn is enqueued. */
   readonly turnId?: number;
 }
 
@@ -32,11 +31,8 @@ export interface ActivityLease {
   readonly kind: 'turn';
   readonly turnId: number;
   readonly origin: PromptOrigin;
-  /** Cancellation flows one way from the kernel: `cancel()` aborts this signal. */
   readonly signal: AbortSignal;
-  /** True once `cancel()` has been issued and the turn is draining. */
   readonly ending: boolean;
-  /** Must be called in a `finally`; idempotent. Returns the lane to `idle` and records the outcome. */
   end(outcome: 'completed' | 'cancelled' | 'failed', detail?: { error?: unknown }): void;
 }
 
@@ -50,37 +46,19 @@ export interface BackgroundActivityRef {
 export interface IAgentActivityService {
   readonly _serviceBrand: undefined;
 
-  lane(): AgentLane;
+  isIdle(): boolean;
 
-  /**
-   * Atomic admission: synchronously performs "session admission consult → own
-   * lane check → enter turn lane → issue lease → register with the session
-   * kernel". Any failing step throws a coded error with no state residue. The
-   * synchronous shape (no `await`) is what makes admission atomic under the
-   * single-threaded event loop.
-   */
   begin(kind: 'turn', opts?: BeginOptions): ActivityLease;
 
-  /** Non-throwing variant: returns `undefined` when admission fails. */
   tryBegin(kind: 'turn', opts?: BeginOptions): ActivityLease | undefined;
 
-  /**
-   * Drives the `initializing → idle` transition. Called by the agent bootstrap
-   * (`agentLifecycle.create`) once construction (and the eager tool / hook / MCP
-   * setup) has finished and the agent is ready to admit turns. Until then
-   * `begin` rejects with `activity.initializing`. No-op when not `initializing`.
-   */
   markReady(): void;
 
-  /** Unified cancel: `turn(active)` → `turn(ending)` and aborts the lease signal. Idempotent. */
   cancel(reason?: unknown): boolean;
 
-  /** Registers a background activity (compaction etc.): visible, cancellable, aborted on disposal. */
   registerBackground(kind: string, controller: AbortController): IDisposable & { readonly id: string };
 
-  /** Enters `disposing`: rejects new `begin`, aborts every lease and background activity. */
   beginDisposal(): void;
-  /** Resolves once every lease and background activity has drained. Awaited by `agentLifecycle`. */
   settled(): Promise<void>;
 }
 
@@ -106,35 +84,17 @@ export interface ISessionActivityKernel {
 
   lane(): SessionLane;
 
-  /** Leaves the restore/materialize window and admits normal session commands. */
   markActive(): void;
 
-  /** Admission table for edge (gateway / rpc / legacy) and `agentLifecycle` commands. */
   canAccept(command: SessionCommand): boolean;
 
-  /**
-   * Called synchronously by the Agent kernel on `begin` (child-injects-parent):
-   * throws `activity.session_rejected` while `quiescing` / `closing` /
-   * `restoring`; otherwise registers the lease for settle tracking and returns
-   * its unregister handle.
-   */
   admitTurn(agentId: string, lease: ActivityLease): IDisposable;
 
-  /**
-   * Atomically acquires global quiescence: synchronously flips the lane to
-   * `quiescing` (closing the door so subsequent `admitTurn` calls reject), then
-   * awaits every in-flight lease to drain.
-   */
   quiesce(reason: string): Promise<SessionQuiesceLease>;
 
   beginClosing(): void;
   settled(): Promise<void>;
 
-  /**
-   * Drives the `restoring → active` transition. Called by the session lifecycle
-   * once materialization (and, for resume, replay) has finished and the session
-   * is ready to accept commands. No-op when not `restoring`.
-   */
   markActive(): void;
 }
 
@@ -185,16 +145,15 @@ export interface ActivityLastTurnState {
   readonly at: number;
 }
 
-/**
- * Structured read model of "what the agent is doing". The observable state
- * space is `lane × turn sub-phase × pending-approval set × active-tool-call set
- * × background-activity set`; the authoritative machine itself stays the five
- * `AgentLane` positions. Derived by the `runtime` projector from the kernel's
- * `LaneModel` plus `IEventBus` facts; emitted as `agent.activity.updated`.
- */
-export interface AgentActivitySnapshot {
-  readonly lane: AgentLane;
+export interface AgentActivityState {
+  readonly lifecycle: AgentLifecycleState;
   readonly turn?: ActivityTurnState;
   readonly lastTurn?: ActivityLastTurnState;
   readonly background: readonly BackgroundActivityRef[];
+}
+
+declare module '#/app/event/eventBus' {
+  interface DomainEventMap {
+    'agent.activity.updated': AgentActivityState & { readonly type: 'agent.activity.updated' };
+  }
 }
