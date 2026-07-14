@@ -35,7 +35,7 @@ export const HEADLESS_FORCE_EXIT_GRACE_MS = 2000;
 export const HEADLESS_STDIO_DRAIN_TIMEOUT_MS = 10000;
 
 // Published npm package name; this can differ from the executable command.
-export const NPM_PACKAGE_NAME = '@xy200303/spec-kimi';
+export const NPM_PACKAGE_NAME = '@dev_xiaoyun/spec-kimi';
 
 // App-owned data paths. SDK/core runtime config is intentionally not routed here.
 export const KIMI_CODE_HOME_ENV = 'KIMI_CODE_HOME';
