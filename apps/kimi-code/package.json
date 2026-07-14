@@ -1,19 +1,20 @@
 {
-  "name": "@moonshot-ai/kimi-code",
+  "name": "@xy200303/spec-kimi",
   "version": "0.24.1",
-  "description": "The Starting Point for Next-Gen Agents",
+  "description": "Spec-driven fork of MoonshotAI/kimi-code",
   "license": "MIT",
   "author": "xy200303",
-  "homepage": "https://github.com/xy200303/kimi-code/tree/feature/spec-coding-tool/apps/kimi-code#readme",
+  "homepage": "https://github.com/xy200303/spec-kimi-code/tree/main/apps/kimi-code#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xy200303/kimi-code.git",
+    "url": "git+https://github.com/xy200303/spec-kimi-code.git",
     "directory": "apps/kimi-code"
   },
   "bugs": {
-    "url": "https://github.com/xy200303/kimi-code/issues"
+    "url": "https://github.com/xy200303/spec-kimi-code/issues"
   },
   "keywords": [
+    "spec-kimi",
     "kimi",
     "kimi-code",
     "cli",
@@ -47,7 +48,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": false
   },
   "scripts": {
     "build": "pnpm -C ../kimi-web run build && tsdown && node scripts/copy-native-assets.mjs && node scripts/copy-web-assets.mjs",

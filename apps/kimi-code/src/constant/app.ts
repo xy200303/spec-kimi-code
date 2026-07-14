@@ -1,11 +1,11 @@
 import { ErrorCodes } from '@moonshot-ai/kimi-code-sdk';
 
-export const PRODUCT_NAME = 'Kimi Code';
+export const PRODUCT_NAME = 'Spec Kimi';
 export const CLI_COMMAND_NAME = 'spec-kimi';
-export const PROCESS_NAME = 'kimi-code';
+export const PROCESS_NAME = 'spec-kimi';
 
 // Used in telemetry app names and HTTP User-Agent headers.
-export const CLI_USER_AGENT_PRODUCT = 'kimi-code-cli';
+export const CLI_USER_AGENT_PRODUCT = 'spec-kimi-cli';
 export const CLI_UI_MODE = 'shell';
 // Telemetry ui_mode for the `kimi web` / `kimi server run` host. Same product
 // as the CLI (CLI_USER_AGENT_PRODUCT); the surface is distinguished by ui_mode.
@@ -35,7 +35,7 @@ export const HEADLESS_FORCE_EXIT_GRACE_MS = 2000;
 export const HEADLESS_STDIO_DRAIN_TIMEOUT_MS = 10000;
 
 // Published npm package name; this can differ from the executable command.
-export const NPM_PACKAGE_NAME = '@moonshot-ai/kimi-code';
+export const NPM_PACKAGE_NAME = '@xy200303/spec-kimi';
 
 // App-owned data paths. SDK/core runtime config is intentionally not routed here.
 export const KIMI_CODE_HOME_ENV = 'KIMI_CODE_HOME';
@@ -60,7 +60,7 @@ export const DEFAULT_OAUTH_PROVIDER_NAME = 'managed:kimi-code';
 // auto-propagates instead of silently breaking the startup recovery path.
 export const OAUTH_LOGIN_REQUIRED_CODE = ErrorCodes.AUTH_LOGIN_REQUIRED;
 
-export const FEEDBACK_ISSUE_URL = 'https://github.com/xy200303/kimi-code/issues';
+export const FEEDBACK_ISSUE_URL = 'https://github.com/xy200303/spec-kimi-code/issues';
 
 // Sent in the feedback `version` field so the backend can distinguish this
 // TypeScript client from clients that send a bare version.
