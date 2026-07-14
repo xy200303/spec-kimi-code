@@ -1,5 +1,5 @@
 /**
- * `goal` domain (L4) - `IAgentGoalService` implementation.
+ * `goal` domain (L4) — `IAgentGoalService` implementation.
  *
  * Owns the per-agent goal lifecycle; persists the goal in the `wire`
  * `GoalModel` (`GoalState | null`) through the `goal.create` / `goal.update` /
@@ -7,9 +7,10 @@
  * publishes `goal.updated` live to `IEventBus`, and forces a replayed `active`
  * goal back to `paused` via `wire.hooks.onDidRestore`. The accumulated
  * `wallClockMs` lives in the Model (set from each Op payload, never by
- * `Date.now()` inside `apply`); the `wallClockResumedAt` cursor is a live-only
- * field, reset on replay and (re)started on the live path. A `forked` wire Op
- * clears the Model
+ * `Date.now()` inside `apply`); the active interval's epoch-ms
+ * `wallClockResumedAt` anchor is
+ * persisted at create/resume boundaries so recovery can settle crash-spanning
+ * elapsed time without periodic writes. A `forked` wire Op clears the Model
  * at a fork boundary; the `goal.*` payload shapes are registered in
  * `PersistedOpMap` (`#/wire/types`) inside `goalOps` because they still ride
  * the Agent wire journal restored into the Model.
@@ -19,15 +20,17 @@
  * loop pops it), accounts live
  * turn usage through `usage`, writes system reminders through
  * `systemReminder`, registers model tools through `toolRegistry`, and reports
- * telemetry through `telemetry`. Bound at Agent scope.
+ * telemetry through `telemetry`. Measures time and arms hard deadlines through
+ * `goal`'s App-scoped deadline scheduler. Bound at Agent scope.
  */
 
 import { randomUUID } from 'node:crypto';
 
 import type { TurnEndedEvent, TurnStartedEvent } from '@moonshot-ai/protocol';
-import { Disposable } from '#/_base/di/lifecycle';
+import { Disposable, MutableDisposable, type IDisposable } from '#/_base/di/lifecycle';
 import { InstantiationType } from '#/_base/di/extensions';
 import { LifecycleScope, registerScopedService } from '#/_base/di/scope';
+import { abortError } from '#/_base/utils/abort';
 import { isPlainRecord } from '#/_base/utils/canonical-args';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
 import type { ContextMessage, PromptOrigin } from '#/agent/contextMemory/types';
@@ -59,6 +62,7 @@ import { defineModel } from '#/wire/model';
 import { IEventBus } from '#/app/event/eventBus';
 
 import { IAgentGoalService, type GoalReasonInput, type ResumeGoalInput } from './goal';
+import { IGoalDeadlineScheduler } from './goalDeadlineScheduler';
 import { clearGoal, createGoal, GoalModel, updateGoal, type GoalState } from './goalOps';
 import type {
   CreateGoalInput,
@@ -194,7 +198,6 @@ function isGoalContinuationOrigin(origin: TurnStartedEvent['origin']): boolean {
 export class AgentGoalService extends Disposable implements IAgentGoalService {
   declare readonly _serviceBrand: undefined;
 
-  private wallClockResumedAt?: number;
   private liveTurnId?: number;
   private readonly goalDrivenTurns = new Map<number, string>();
   private readonly countedGoalTurns = new Set<number>();
@@ -205,6 +208,8 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
   private readonly pendingContinuationGoals = new Map<number, string>();
   private readonly goalTurnTargets = new Map<number, string>();
   private readonly exhaustedTurnBudgetGoals = new Map<number, string>();
+  private readonly wallClockDeadline = this._register(new MutableDisposable<IDisposable>());
+  private liveWallClockStartedAt?: number;
   private pendingContinuation?: PendingContinuation;
 
   constructor(
@@ -217,6 +222,7 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
     @IAgentToolExecutorService toolExecutor: IAgentToolExecutorService,
     @IAgentUsageService usageService: IAgentUsageService,
     @IConfigService private readonly config: IConfigService,
+    @IGoalDeadlineScheduler private readonly deadlineScheduler: IGoalDeadlineScheduler,
   ) {
     super();
     this._register(
@@ -312,16 +318,19 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
   async createGoal(input: CreateGoalInput, actor: GoalActor = 'user'): Promise<GoalSnapshot> {
     const objective = this.validateObjective(input.objective);
     this.prepareForGoalCreation(input.replace === true);
+    const wallClockResumedAt = Date.now();
     this.wire.dispatch(
       createGoal({
         goalId: randomUUID(),
         objective,
         completionCriterion: normalizeCompletionCriterion(input.completionCriterion),
+        wallClockResumedAt,
       }),
     );
-    this.wallClockResumedAt = Date.now();
+    this.liveWallClockStartedAt = this.deadlineScheduler.now();
     this.adoptStarterTurn(actor);
     const state = this.requireState();
+    this.refreshWallClockDeadline(state);
     this.emitGoalUpdated(this.toSnapshot(state));
     this.telemetry.track2('goal_created', { actor, replace: input.replace === true });
     return this.toSnapshot(state);
@@ -412,12 +421,18 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
       actor,
       ...budgetTelemetryProperties(input.budgetLimits),
     });
-    return this.blockIfBudgetReached(next) ?? this.toSnapshot(next);
+    const blocked = this.blockIfBudgetReached(next);
+    if (blocked !== null) return blocked;
+    this.refreshWallClockDeadline(next);
+    return this.toSnapshot(next);
   }
 
   async cancelGoal(_input: GoalReasonInput = {}, actor: GoalActor = 'user'): Promise<GoalSnapshot> {
     const state = this.requireState();
     const snapshot = this.toSnapshot(state);
+    if (state.status === 'active' && this.liveTurnId !== undefined) {
+      this.loopService.cancel(this.liveTurnId);
+    }
     this.clearInternal(actor);
     if (actor === 'user') {
       this.reminders.appendSystemReminder(GOAL_CANCELLED_REMINDER, {
@@ -457,7 +472,6 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
 
   private dispatchCompletion(state: GoalState, reason: string | undefined, actor: GoalActor): void {
     const wallClockMs = this.settleWallClock(state);
-    this.wallClockResumedAt = undefined;
     this.wire.dispatch(updateGoal({ status: 'complete', reason, wallClockMs, actor }));
   }
 
@@ -750,20 +764,34 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
     return this.goalTurnTargets.get(turnId) ?? this.goalDrivenTurns.get(turnId);
   }
 
-  private cancelPendingContinuation(preserveLiveContinuation = false): void {
+  private cancelPendingContinuation(
+    preserveLiveContinuation = false,
+    reason?: unknown,
+  ): void {
     const pending = this.pendingContinuation;
     if (preserveLiveContinuation && pending?.turnId === this.liveTurnId) return;
     this.pendingContinuation = undefined;
-    if (pending !== undefined && !pending.receipt.abort() && pending.turnId !== undefined) {
-      this.loopService.cancel(pending.turnId);
+    const aborted =
+      reason === undefined ? pending?.receipt.abort() : pending?.receipt.abort(reason);
+    if (
+      pending !== undefined &&
+      !aborted &&
+      pending.turnId !== undefined
+    ) {
+      if (reason === undefined) {
+        this.loopService.cancel(pending.turnId);
+      } else {
+        this.loopService.cancel(pending.turnId, reason);
+      }
     }
   }
 
   private normalizeAfterReplay(): void {
     this.appendForkClearedReminder();
+    this.wallClockDeadline.clear();
+    this.liveWallClockStartedAt = undefined;
     const state = this.goalState;
     if (state === null) return;
-    this.wallClockResumedAt = undefined;
     if (state.status === 'complete') {
       this.clearInternal('runtime', { emit: false, track: false });
       return;
@@ -796,7 +824,8 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
   ): void {
     if (this.goalState === null) return;
     this.cancelPendingContinuation(opts.preserveLiveContinuation === true);
-    this.wallClockResumedAt = undefined;
+    this.wallClockDeadline.clear();
+    this.liveWallClockStartedAt = undefined;
     this.wire.dispatch(clearGoal({}));
     if (opts.emit !== false) this.emitGoalUpdated(null);
     if (opts.track !== false) this.telemetry.track2('goal_cleared', { actor });
@@ -807,18 +836,29 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
     status: GoalStatus,
     reason: string | undefined,
     actor: GoalActor,
-    opts: { readonly preserveLiveContinuation?: boolean } = {},
+    opts: {
+      readonly preserveLiveContinuation?: boolean;
+      readonly cancellationReason?: unknown;
+    } = {},
   ): GoalSnapshot {
     const wallClockMs = this.settleWallClock(state);
+    const wallClockResumedAt = status === 'active' ? Date.now() : undefined;
     if (status === 'active') {
-      this.wallClockResumedAt = Date.now();
+      this.liveWallClockStartedAt = this.deadlineScheduler.now();
     } else if (state.status === 'active') {
-      this.cancelPendingContinuation(opts.preserveLiveContinuation === true);
-      this.wallClockResumedAt = undefined;
+      this.cancelPendingContinuation(
+        opts.preserveLiveContinuation === true,
+        opts.cancellationReason,
+      );
+      this.wallClockDeadline.clear();
+      this.liveWallClockStartedAt = undefined;
     }
-    this.wire.dispatch(updateGoal({ status, reason, wallClockMs, actor }));
+    this.wire.dispatch(
+      updateGoal({ status, reason, wallClockMs, wallClockResumedAt, actor }),
+    );
     const next = this.requireState();
     if (status === 'active') this.adoptStarterTurn(actor);
+    if (status === 'active') this.refreshWallClockDeadline(next);
     this.emitGoalUpdated(this.toSnapshot(next), { kind: 'lifecycle', status, reason, actor });
     this.trackStatusChanged(next, actor);
     return this.toSnapshot(next);
@@ -848,15 +888,27 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
   }
 
   private settleWallClock(state: GoalState): number {
-    if (state.status === 'active' && this.wallClockResumedAt !== undefined) {
-      return state.wallClockMs + Math.max(0, Date.now() - this.wallClockResumedAt);
+    if (state.status === 'active' && this.liveWallClockStartedAt !== undefined) {
+      return (
+        state.wallClockMs +
+        Math.max(0, this.deadlineScheduler.now() - this.liveWallClockStartedAt)
+      );
+    }
+    if (state.status === 'active' && state.wallClockResumedAt !== undefined) {
+      return state.wallClockMs + Math.max(0, Date.now() - state.wallClockResumedAt);
     }
     return state.wallClockMs;
   }
 
   private liveWallClockMs(state: GoalState): number {
-    if (state.status === 'active' && this.wallClockResumedAt !== undefined) {
-      return state.wallClockMs + Math.max(0, Date.now() - this.wallClockResumedAt);
+    if (state.status === 'active' && this.liveWallClockStartedAt !== undefined) {
+      return (
+        state.wallClockMs +
+        Math.max(0, this.deadlineScheduler.now() - this.liveWallClockStartedAt)
+      );
+    }
+    if (state.status === 'active' && state.wallClockResumedAt !== undefined) {
+      return state.wallClockMs + Math.max(0, Date.now() - state.wallClockResumedAt);
     }
     return state.wallClockMs;
   }
@@ -891,6 +943,45 @@ export class AgentGoalService extends Disposable implements IAgentGoalService {
     return this.applyLifecycle(state, 'blocked', reason, 'runtime', {
       preserveLiveContinuation: true,
     });
+  }
+
+  private refreshWallClockDeadline(state: GoalState): void {
+    this.wallClockDeadline.clear();
+    const budgetMs = state.budgetLimits.wallClockBudgetMs;
+    if (
+      state.status !== 'active' ||
+      budgetMs === undefined ||
+      this.liveWallClockStartedAt === undefined
+    ) {
+      return;
+    }
+    const remainingMs = Math.max(0, budgetMs - this.liveWallClockMs(state));
+    this.wallClockDeadline.value = this.deadlineScheduler.schedule(remainingMs, () => {
+      this.handleWallClockDeadline();
+    });
+  }
+
+  private handleWallClockDeadline(): void {
+    this.wallClockDeadline.clear();
+    const state = this.goalState;
+    if (state === null || state.status !== 'active') return;
+    const budgetMs = state.budgetLimits.wallClockBudgetMs;
+    if (budgetMs === undefined) return;
+    if (this.liveWallClockMs(state) < budgetMs) {
+      this.refreshWallClockDeadline(state);
+      return;
+    }
+    const reason = goalBudgetBlockReason(this.toSnapshot(state).budget);
+    if (reason === undefined) return;
+    const cancellation = abortError(reason);
+    const liveTurnId = this.liveTurnId;
+    const pendingTurnId = this.pendingContinuation?.turnId;
+    this.applyLifecycle(state, 'blocked', reason, 'runtime', {
+      cancellationReason: cancellation,
+    });
+    if (liveTurnId !== undefined && liveTurnId !== pendingTurnId) {
+      this.loopService.cancel(liveTurnId, cancellation);
+    }
   }
 }
 
