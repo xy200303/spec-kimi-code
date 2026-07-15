@@ -19,12 +19,14 @@ import {
   type Event,
   type KimiHarness,
   type McpServerInfo,
+  type PermissionMode,
   type PromptPart,
   type QuestionAnswers,
   type QuestionRequest,
   type Session,
   type SessionStatus,
   type SessionUsage,
+  type ThinkingEffort,
 } from '@moonshot-ai/kimi-code-sdk';
 
 import {
@@ -792,6 +794,80 @@ export class AcpSession {
   ): Promise<PromptResponse> {
     try {
       switch (name) {
+        case 'yolo':
+          await this.session.setPermission('yolo');
+          await this.emitLocalCommandMessage('Permission mode set to YOLO.');
+          break;
+        case 'auto':
+          await this.session.setPermission('auto');
+          await this.emitLocalCommandMessage('Permission mode set to Auto.');
+          break;
+        case 'permission': {
+          const mode = parsePermissionMode(args);
+          if (mode === undefined) {
+            const status = await this.session.getStatus();
+            await this.emitLocalCommandMessage(`Current permission mode: ${status.permission}.`);
+          } else {
+            await this.session.setPermission(mode);
+            await this.emitLocalCommandMessage(`Permission mode set to ${mode}.`);
+          }
+          break;
+        }
+        case 'model': {
+          const model = args.trim();
+          if (model.length === 0) {
+            await this.emitLocalCommandMessage('Usage: /model <model-id>');
+          } else {
+            await this.session.setModel(model);
+            await this.emitLocalCommandMessage(`Model set to ${model}.`);
+          }
+          break;
+        }
+        case 'effort': {
+          const effort = parseThinkingEffort(args);
+          if (effort === undefined) {
+            await this.emitLocalCommandMessage('Usage: /effort <thinking-effort>');
+          } else {
+            await this.session.setThinking(effort);
+            await this.emitLocalCommandMessage(`Thinking effort set to ${effort}.`);
+          }
+          break;
+        }
+        case 'plan': {
+          const planState = parsePlanMode(args);
+          if (planState === 'clear') {
+            await this.emitLocalCommandMessage('Plan mode clear is not yet supported over ACP.');
+          } else if (planState === undefined) {
+            await this.emitLocalCommandMessage('Usage: /plan [on|off|clear]');
+          } else {
+            await this.session.setPlanMode(planState);
+            await this.emitLocalCommandMessage(`Plan mode ${planState ? 'enabled' : 'disabled'}.`);
+          }
+          break;
+        }
+        case 'swarm': {
+          const swarmState = parseSwarmMode(args);
+          if (swarmState === undefined) {
+            await this.emitLocalCommandMessage('Usage: /swarm [on|off] | <task>');
+          } else if (swarmState === 'toggle-on') {
+            await this.session.setSwarmMode(true, 'manual');
+            await this.emitLocalCommandMessage('Swarm mode enabled.');
+          } else if (swarmState === 'toggle-off') {
+            await this.session.setSwarmMode(false, 'manual');
+            await this.emitLocalCommandMessage('Swarm mode disabled.');
+          } else {
+            await this.emitLocalCommandMessage('Running one-off swarm tasks is not yet supported over ACP.');
+          }
+          break;
+        }
+        case 'init':
+          await this.session.init();
+          await this.emitLocalCommandMessage('Analyzing codebase and generating AGENTS.md…');
+          break;
+        case 'reload':
+          await this.session.reloadSession();
+          await this.emitLocalCommandMessage('Session reloaded.');
+          break;
         case 'compact':
           await this.runCompactCommand(args);
           break;
@@ -1406,6 +1482,38 @@ type CompactionOutcome =
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function parsePermissionMode(args: string): PermissionMode | undefined {
+  const normalized = args.trim().toLowerCase();
+  if (normalized.length === 0) return undefined;
+  if (normalized === 'yolo' || normalized === 'auto' || normalized === 'manual') {
+    return normalized;
+  }
+  return undefined;
+}
+
+function parseThinkingEffort(args: string): ThinkingEffort | undefined {
+  const effort = args.trim();
+  return effort.length > 0 ? (effort as ThinkingEffort) : undefined;
+}
+
+function parsePlanMode(args: string): boolean | 'clear' | undefined {
+  const normalized = args.trim().toLowerCase();
+  if (normalized.length === 0) return undefined;
+  if (normalized === 'on' || normalized === 'true') return true;
+  if (normalized === 'off' || normalized === 'false') return false;
+  if (normalized === 'clear') return 'clear';
+  return undefined;
+}
+
+function parseSwarmMode(args: string): 'toggle-on' | 'toggle-off' | 'task' | undefined {
+  const normalized = args.trim().toLowerCase();
+  if (normalized.length === 0) return undefined;
+  if (normalized === 'on' || normalized === 'true') return 'toggle-on';
+  if (normalized === 'off' || normalized === 'false') return 'toggle-off';
+  // Anything non-empty that is not a toggle is treated as a one-off task description.
+  return 'task';
 }
 
 function formatHelpReport(commands: readonly AvailableCommand[]): string {

@@ -16,6 +16,7 @@ import {
 } from '@agentclientprotocol/sdk';
 import type { Event, KimiHarness, Session } from '@moonshot-ai/kimi-code-sdk';
 
+import { ACP_BUILTIN_SLASH_COMMANDS } from '../src/builtin-commands';
 import { AcpServer } from '../src/server';
 import { AUTHED_STATUS } from './_helpers/harness-stubs';
 
@@ -66,6 +67,7 @@ function makeFakeSession(
     prompt: number;
     activate: Array<{ name: string; args?: string | undefined }>;
   };
+  permissionCalls: string[];
 } {
   const listeners = new Set<(event: Event) => void>();
   const calls = {
@@ -78,6 +80,7 @@ function makeFakeSession(
       for (const fn of listeners) fn(ev);
     }
   };
+  const permissionCalls: Array<string> = [];
   const session = {
     id: sessionId,
     prompt: async (_input: unknown) => {
@@ -104,8 +107,11 @@ function makeFakeSession(
         type: 'prompt',
       },
     ],
+    setPermission: async (mode: string) => {
+      permissionCalls.push(mode);
+    },
   } as unknown as Session;
-  return { session, calls };
+  return { session, calls, permissionCalls };
 }
 
 const textBlock = (text: string): ContentBlock => ({ type: 'text', text });
@@ -329,6 +335,63 @@ describe('AcpSession slash routing', () => {
     expect(text).toContain('Available ACP commands:');
     expect(text).toContain('/compact');
     expect(text).toContain('/help');
+  });
+
+  it('advertises TUI-derived built-in slash commands in available_commands_update', async () => {
+    const sessionId = 'sess-slash-palette';
+    const { session } = makeFakeSession(sessionId, []);
+    const harness = {
+      auth: { status: async () => AUTHED_STATUS },
+      createSession: async () => session,
+    } as unknown as KimiHarness;
+
+    const { agentStream, clientStream } = makeInMemoryStreamPair();
+    new AgentSideConnection(
+      (c) => new AcpServer(harness, c, { slashCommands: ACP_BUILTIN_SLASH_COMMANDS }),
+      agentStream,
+    );
+    const collecting = new CollectingClient();
+    const client = new ClientSideConnection(() => collecting, clientStream);
+
+    await client.newSession({ cwd: '/tmp/x', mcpServers: [] });
+    await waitForAvailableCommands(collecting);
+
+    const cmdUpdate = collecting.updates.find(
+      (n) =>
+        (n.update as { sessionUpdate?: string }).sessionUpdate ===
+        'available_commands_update',
+    );
+    expect(cmdUpdate).toBeDefined();
+    const commands = (cmdUpdate!.update as { availableCommands: Array<{ name: string }> }).availableCommands;
+    const names = commands.map((c) => c.name);
+    expect(names).toContain('yolo');
+    expect(names).toContain('auto');
+    expect(names).toContain('init');
+    expect(names).toContain('model');
+    expect(names).toContain('plan');
+  });
+
+  it('routes built-in `/yolo` to Session.setPermission', async () => {
+    const sessionId = 'sess-slash-yolo';
+    const { session, calls, permissionCalls } = makeFakeSession(sessionId, [endedTurn(sessionId)]);
+    const harness = {
+      auth: { status: async () => AUTHED_STATUS },
+      createSession: async () => session,
+    } as unknown as KimiHarness;
+
+    const { agentStream, clientStream } = makeInMemoryStreamPair();
+    new AgentSideConnection((c) => new AcpServer(harness, c), agentStream);
+    const collecting = new CollectingClient();
+    const client = new ClientSideConnection(() => collecting, clientStream);
+
+    await client.newSession({ cwd: '/tmp/x', mcpServers: [] });
+    await waitForAvailableCommands(collecting);
+
+    await client.prompt({ sessionId, prompt: [textBlock('/yolo')] });
+
+    expect(calls.prompt).toBe(0);
+    expect(calls.activate).toEqual([]);
+    expect(permissionCalls).toEqual(['yolo']);
   });
 
   it('routes built-in `/status` locally and renders SDK status fields', async () => {
