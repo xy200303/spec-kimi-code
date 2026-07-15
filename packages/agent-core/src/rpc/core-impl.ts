@@ -14,6 +14,7 @@ import { getCoreVersion } from '#/version';
 import { resolveThinkingEffort } from '../agent/config/thinking';
 import { Agent } from '../agent';
 import {
+  applyPrintModeConfigDefaults,
   ensureKimiHome,
   loadRuntimeConfigSafe,
   mergeConfigPatch,
@@ -148,6 +149,12 @@ export interface KimiCoreOptions {
   readonly skillDirs?: readonly string[];
   readonly telemetry?: TelemetryClient | undefined;
   readonly appVersion?: string;
+  /**
+   * Host UI mode (`'print'` for `kimi -p`, `'cli'` for the TUI, ...). When
+   * `'print'`, sessions are created with the print-mode config defaults from
+   * `applyPrintModeConfigDefaults` (user-set values still win).
+   */
+  readonly uiMode?: string | undefined;
 }
 
 export class KimiCore implements PromisableMethods<CoreAPI> {
@@ -172,6 +179,8 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
   private pluginsLoadError: Error | undefined;
   private readonly appVersion: string | undefined;
   private readonly experimentalFlags: FlagResolver;
+  /** `true` when the host runs `kimi -p` (v1 print mode); see `withPrintModeDefaults`. */
+  private readonly printMode: boolean;
   /** Owner-scoped [image] limits; reload pushes the new config via setConfig. */
   readonly imageLimits: ImageLimits;
 
@@ -192,6 +201,7 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
     this.skillDirs = options.skillDirs ?? [];
     this.telemetry = options.telemetry ?? noopTelemetryClient;
     this.appVersion = options.appVersion;
+    this.printMode = options.uiMode === 'print';
     ensureKimiHome(this.homeDir);
     // Schema errors degrade (invalid sections are dropped with warnings) so a
     // typo cannot prevent startup, but a file that cannot be used at all —
@@ -237,6 +247,7 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
     const options = input;
     const workDir = requiredWorkDir('createSession', options.workDir);
     const config = this.reloadProviderManager();
+    const sessionConfig = this.withPrintModeDefaults(config);
     const id = options.id ?? createSessionId();
     const modelAlias = options.model ?? config.defaultModel;
     const model = modelAlias !== undefined ? config.models?.[modelAlias] : undefined;
@@ -299,13 +310,13 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
       kaos: parentKaos.withCwd(workDir),
       persistenceKaos,
       toolServices: runtime,
-      config,
+      config: sessionConfig,
       id,
       homedir: summary.sessionDir,
       kimiHomeDir: this.homeDir,
       rpc: proxyWithExtraPayload(await this.sdk, { sessionId: summary.id }),
       providerManager: this.resolveProviderManager(summary.id),
-      background: config.background,
+      background: sessionConfig.background,
       hooks: [...(config.hooks ?? []), ...this.plugins.enabledHooks()],
       permissionRules: config.permission?.rules,
       skills: this.resolveSessionSkillConfig(config),
@@ -419,6 +430,7 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
     }
 
     const config = this.reloadProviderManager();
+    const sessionConfig = this.withPrintModeDefaults(config);
     const baseMcpConfig = await resolveSessionMcpConfig({
       cwd: summary.workDir,
       homeDir: this.homeDir,
@@ -435,13 +447,13 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
       kaos: parentKaos.withCwd(summary.workDir),
       persistenceKaos,
       toolServices: runtime,
-      config,
+      config: sessionConfig,
       id: summary.id,
       homedir: summary.sessionDir,
       kimiHomeDir: this.homeDir,
       rpc: proxyWithExtraPayload(await this.sdk, { sessionId: summary.id }),
       providerManager: this.resolveProviderManager(summary.id),
-      background: config.background,
+      background: sessionConfig.background,
       hooks: [...(config.hooks ?? []), ...this.plugins.enabledHooks()],
       permissionRules: config.permission?.rules,
       skills: this.resolveSessionSkillConfig(config),
@@ -1107,6 +1119,16 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
     this.experimentalFlags.setConfigOverrides(config.experimental);
     this.imageLimits.setConfig(config.image);
     return this.config;
+  }
+
+  /**
+   * Config bound to a newly created/resumed session. In print mode (`kimi -p`,
+   * v1) the print-mode defaults are merged in; explicit user config wins. The
+   * raw `this.config` is left untouched so `getKimiConfig` and config writes
+   * still round-trip the user's file values.
+   */
+  private withPrintModeDefaults(config: KimiConfig): KimiConfig {
+    return this.printMode ? applyPrintModeConfigDefaults(config) : config;
   }
 
   private clearRuntimeCache(): void {
