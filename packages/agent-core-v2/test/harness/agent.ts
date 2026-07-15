@@ -13,6 +13,7 @@ import type { AgentTaskInfo } from '#/agent/task/task';
 import { IAgentBlobService } from '#/agent/blob/agentBlobService';
 import { AgentBlobServiceImpl } from '#/agent/blob/agentBlobServiceImpl';
 import { IHostEnvironment } from '#/os/interface/hostEnvironment';
+import { IFlagService } from '#/app/flag/flag';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
 import type { ContextMessage } from '#/agent/contextMemory/types';
 import { ISessionCronService } from '#/session/cron/sessionCronService';
@@ -375,6 +376,7 @@ function defineServiceValue<T>(
 export interface ExecEnvOverride {
   readonly hostFs?: IHostFileSystem | Partial<IHostFileSystem>;
   readonly processRunner?: ISessionProcessRunner | Partial<ISessionProcessRunner>;
+  readonly flags?: Partial<IFlagService>;
 }
 
 export function execEnvServices(override: ExecEnvOverride = {}): TestAgentServiceOverride {
@@ -390,12 +392,15 @@ export function execEnvServices(override: ExecEnvOverride = {}): TestAgentServic
       new SyncDescriptor(SessionWorkspaceContextService),
     );
   });
-  if (override.hostFs === undefined) return session;
-
-  const hostFs = resolveHostFsOverride(override.hostFs);
   return [
     appServices((reg) => {
-      reg.defineInstance(IHostFileSystem, hostFs);
+      reg.definePartialInstance(IFlagService, {
+        enabled: () => false,
+        ...override.flags,
+      });
+      if (override.hostFs !== undefined) {
+        reg.defineInstance(IHostFileSystem, resolveHostFsOverride(override.hostFs));
+      }
     }),
     session,
   ];

@@ -140,6 +140,8 @@ Switch Kimi Code CLI to ACP (Agent Client Protocol) mode, communicating with an 
 spec-kimi acp
 ```
 
+Use `--engine v2` to opt into the experimental v2 backend, or set `KIMI_ACP_ENGINE=v2`. The command-line flag takes precedence over the environment variable. See the [spec-kimi acp reference](./kimi-acp.md#engine-selection) for the backend and extension details.
+
 ### `spec-kimi server`
 
 Run, install, and manage the local Kimi server — a single process that exposes the REST + WebSocket API and serves the web UI from the same origin. The parent command is split into an on-demand entrypoint (`run`) and an OS-managed service lifecycle (`install`, `uninstall`, `start`, `stop`, `restart`, `status`). `spec-kimi server run` ensures a single background daemon is running and returns once it is healthy; pass `--foreground` to keep the server attached to the current terminal instead.

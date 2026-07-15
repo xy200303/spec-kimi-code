@@ -19,12 +19,21 @@ import type { ISessionScopeHandle } from '#/_base/di/scope';
 import type { Event } from '#/_base/event';
 import type { McpServerConfig } from '#/agent/mcp/config-schema';
 import type { Hooks } from '#/hooks';
+import type { IHostFileSystem } from '#/os/interface/hostFileSystem';
 
 export interface CreateSessionOptions {
   readonly sessionId?: string;
   readonly workDir: string;
   readonly additionalDirs?: readonly string[];
   readonly mcpServers?: Readonly<Record<string, McpServerConfig>>;
+  /** Process-local host override inherited by this Session scope and its Agents. */
+  readonly hostFileSystem?: IHostFileSystem;
+}
+
+export interface ResumeSessionOptions {
+  readonly mcpServers?: Readonly<Record<string, McpServerConfig>>;
+  /** Process-local host override inherited by the resumed Session scope and its Agents. */
+  readonly hostFileSystem?: IHostFileSystem;
 }
 
 export interface ForkSessionOptions {
@@ -87,7 +96,10 @@ export interface ISessionLifecycleService {
   create(opts: CreateSessionOptions): Promise<ISessionScopeHandle>;
   get(sessionId: string): ISessionScopeHandle | undefined;
   list(): readonly ISessionScopeHandle[];
-  resume(sessionId: string): Promise<ISessionScopeHandle | undefined>;
+  resume(
+    sessionId: string,
+    opts?: ResumeSessionOptions,
+  ): Promise<ISessionScopeHandle | undefined>;
   close(sessionId: string): Promise<void>;
   archive(sessionId: string): Promise<void>;
   restore(sessionId: string): Promise<ISessionScopeHandle | undefined>;

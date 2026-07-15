@@ -7,6 +7,7 @@ import {
   IAgentLifecycleService,
   IAgentRPCService,
   IEventService,
+  IModelCatalogService,
   IPluginService,
   ISessionActivity,
   ISessionIndex,
@@ -160,6 +161,7 @@ describe('server-v2 /api/v2 RPC', () => {
 
     const byName = new Map(body.data.map((c) => [c.name, c]));
     expect(byName.get('sessionIndex')?.scope).toBe('app');
+    expect(byName.get(String(IModelCatalogService))?.scope).toBe('app');
     expect(byName.get('sessionMetadata')?.scope).toBe('session');
     expect(byName.get('agentRPCService')?.scope).toBe('agent');
 

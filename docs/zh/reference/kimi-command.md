@@ -140,6 +140,8 @@ spec-kimi login
 spec-kimi acp
 ```
 
+使用 `--engine v2` 可选择实验性的 v2 后端，也可以设置 `KIMI_ACP_ENGINE=v2`。命令行参数的优先级高于环境变量。后端和扩展细节见 [spec-kimi acp 参考](./kimi-acp.md#引擎选择)。
+
 ### `spec-kimi server`
 
 运行并管理本地 Kimi 服务 —— 同一个进程同时挂载 REST + WebSocket API 与 web UI。父命令拆成按需入口 (`run`) 与 OS 级生命周期管理 (`install`、`uninstall`、`start`、`stop`、`restart`、`status`)。`spec-kimi server run` 会确保一个后台守护进程在运行、健康后返回；如需把服务挂在当前终端，请加 `--foreground`。

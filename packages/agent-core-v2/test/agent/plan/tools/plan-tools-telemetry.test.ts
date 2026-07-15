@@ -2,7 +2,10 @@ import type { ToolCall } from '#/app/llmProtocol/message';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IAgentPlanService, PlanData } from '#/agent/plan/plan';
-import { EnterPlanModeTool } from '#/agent/plan/tools/enter-plan-mode';
+import {
+  EnterPlanModeInputSchema,
+  EnterPlanModeTool,
+} from '#/agent/plan/tools/enter-plan-mode';
 import {
   ExitPlanModeTool,
   type ExitPlanModeInput,
@@ -30,6 +33,12 @@ const ACTIVE_PLAN: NonNullable<PlanData> = {
   id: 'test-plan',
   content: '# Plan\n\n- Inspect\n- Change\n- Verify',
   path: '/tmp/kimi-plan.md',
+};
+
+const ACTIVE_SPECIFICATION: NonNullable<PlanData> = {
+  ...ACTIVE_PLAN,
+  path: '/workspace/specs/acp-v2-engine/spec.md',
+  deliveryPath: '/workspace/specs/acp-v2-engine/delivery.md',
 };
 
 const options = [
@@ -98,13 +107,20 @@ describe('EnterPlanModeTool telemetry', () => {
     expect(tool.description).toContain('non-trivial implementation task');
     expect(tool.parameters).toMatchObject({
       type: 'object',
-      properties: {},
+      properties: { name: expect.objectContaining({ type: 'string' }) },
       additionalProperties: false,
     });
 
     const execution = tool.resolveExecution({});
     if (execution.isError === true) throw new Error('expected runnable execution');
     expect(execution.description).toBe('Requesting to enter plan mode');
+  });
+
+  it('accepts a semantic spec name and rejects invalid names', () => {
+    expect(EnterPlanModeInputSchema.parse({ name: 'acp-v2-engine' })).toEqual({
+      name: 'acp-v2-engine',
+    });
+    expect(() => EnterPlanModeInputSchema.parse({ name: 'ACP V2' })).toThrow();
   });
 
   it('returns an error when plan mode is already active', async () => {
@@ -164,6 +180,29 @@ describe('EnterPlanModeTool telemetry', () => {
     expect(result.isError).toBeFalsy();
     expect(result.output).toContain(`Plan file: ${ACTIVE_PLAN.path}`);
     expect(result.output).toContain('Write the plan to the plan file with Write or Edit');
+  });
+
+  it('uses specification guidance when the active plan has a delivery record', async () => {
+    let active = false;
+    const planMode = planService({
+      status: null,
+      enter: vi.fn(async () => {
+        active = true;
+      }),
+    });
+    vi.mocked(planMode.status).mockImplementation(async () => (active ? ACTIVE_SPECIFICATION : null));
+    const { telemetry } = recordingTelemetry();
+
+    const result = await executeTool(new EnterPlanModeTool(planMode, telemetry), {
+      turnId: 0,
+      toolCallId: 'call_enter_spec',
+      args: { name: 'acp-v2-engine' },
+      signal: new AbortController().signal,
+    });
+
+    expect(result.output).toContain(`Specification file: ${ACTIVE_SPECIFICATION.path}`);
+    expect(result.output).toContain(`Delivery record: ${ACTIVE_SPECIFICATION.deliveryPath}`);
+    expect(planMode.enter).toHaveBeenCalledWith('acp-v2-engine');
   });
 
   it('returns an error when entering plan mode fails', async () => {
@@ -341,6 +380,25 @@ describe('ExitPlanModeTool telemetry', () => {
       output:
         'No plan file found. Write the plan to the current plan file first, then call ExitPlanMode.',
     });
+  });
+
+  it('instructs the user to maintain the delivery record after an approved specification', async () => {
+    const { telemetry } = recordingTelemetry();
+    const manualPermission = { ...permissionMode(), mode: 'manual' as const };
+
+    const result = await executeTool(
+      new ExitPlanModeTool(planService({ status: ACTIVE_SPECIFICATION }), manualPermission, telemetry),
+      {
+        turnId: 7,
+        toolCallId: 'call_exit_specification',
+        args: {},
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.output).toContain('keep the task checklist in the specification up to date');
+    expect(result.output).toContain(ACTIVE_SPECIFICATION.deliveryPath);
   });
 
   it('exposes options[].description as optional with a default of empty string', () => {

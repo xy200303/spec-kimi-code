@@ -34,6 +34,7 @@ import {
   type ISessionScopeHandle,
   LifecycleScope,
   registerScopedService,
+  type ScopeSeed,
 } from '#/_base/di/scope';
 import { unwrapErrorCause } from '#/_base/errors/errors';
 import { Emitter, type Event } from '#/_base/event';
@@ -45,6 +46,8 @@ import { IBootstrapService } from '#/app/bootstrap/bootstrap';
 import { CRON_SESSION_TAG, type CronTask } from '#/app/cron/cronTask';
 import { ICronTaskPersistence } from '#/app/cron/cronTaskPersistence';
 import { IConfigService } from '#/app/config/config';
+import { IFileEditService } from '#/app/edit/fileEdit';
+import { FileEditService } from '#/app/edit/fileEditService';
 import { IEventService } from '#/app/event/event';
 import {
   CHILD_SESSION_KIND,
@@ -82,6 +85,7 @@ import {
   type CreateChildSessionOptions,
   type CreateSessionOptions,
   type ForkSessionOptions,
+  type ResumeSessionOptions,
   type SessionArchivedEvent,
   type SessionClosedEvent,
   type SessionCreatedEvent,
@@ -167,12 +171,20 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     );
     const additionalDirs = [...localWorkspaceDirs.additionalDirs, ...callerAdditionalDirs];
     await this.hostEnv.ready;
+    let sessionSeeds: ScopeSeed = [...sessionContextSeed(ctx)];
+    if (opts.hostFileSystem !== undefined) {
+      sessionSeeds = [
+        ...sessionSeeds,
+        [IHostFileSystem, opts.hostFileSystem],
+        [IFileEditService, new FileEditService(opts.hostFileSystem)],
+      ];
+    }
     const handle = createScopedChildHandle(
       this.instantiation,
       LifecycleScope.Session,
       opts.sessionId,
       {
-        extra: [...sessionContextSeed(ctx)],
+        extra: sessionSeeds,
       },
     ) as ISessionScopeHandle;
     handle.accessor.get(ISessionActivityKernel);
@@ -214,12 +226,15 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     return this.sessions.get(sessionId);
   }
 
-  resume(sessionId: string): Promise<ISessionScopeHandle | undefined> {
+  resume(
+    sessionId: string,
+    opts?: ResumeSessionOptions,
+  ): Promise<ISessionScopeHandle | undefined> {
     const inflight = this.resuming.get(sessionId);
     if (inflight !== undefined) return inflight;
     const live = this.sessions.get(sessionId);
     if (live !== undefined) return Promise.resolve(live);
-    const promise = this.doResume(sessionId)
+    const promise = this.doResume(sessionId, opts)
       .catch((error: unknown) => {
         this.telemetry.setContext({ sessionId });
         this.telemetry.track2('session_load_failed', {
@@ -232,7 +247,10 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     return promise;
   }
 
-  private async doResume(sessionId: string): Promise<ISessionScopeHandle | undefined> {
+  private async doResume(
+    sessionId: string,
+    opts?: ResumeSessionOptions,
+  ): Promise<ISessionScopeHandle | undefined> {
     const live = this.sessions.get(sessionId);
     if (live !== undefined) return live;
 
@@ -247,6 +265,8 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
       sessionId,
       workDir,
       workspaceId: summary.workspaceId,
+      mcpServers: opts?.mcpServers,
+      hostFileSystem: opts?.hostFileSystem,
     });
     const agents = handle.accessor.get(IAgentLifecycleService);
     if (agents.get(MAIN_AGENT_ID) === undefined) {

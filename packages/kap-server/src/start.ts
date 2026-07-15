@@ -11,7 +11,9 @@ import {
   bootstrap,
   hostRequestHeadersSeed,
   IConfigService,
+  IHostFileSystem,
   IModelCatalogService,
+  ISessionLifecycleService,
   IWorkspaceRegistry,
   logSeed,
   MULTI_SERVER_FLAG_ENV,
@@ -128,6 +130,11 @@ export interface ServerStartOptions {
 export interface RunningServer {
   readonly app: FastifyInstance;
   readonly core: Scope;
+  /** Process-local services for embedding session-specific host backends. */
+  readonly embeddedSessionHost: {
+    readonly lifecycle: ISessionLifecycleService;
+    readonly hostFileSystem: IHostFileSystem;
+  };
   readonly connectionRegistry: IConnectionRegistry;
   readonly authTokenService: IAuthTokenService;
   readonly host: string;
@@ -576,7 +583,19 @@ export async function startServer(opts: ServerStartOptions = {}): Promise<Runnin
     );
   });
 
-  return { app, core, connectionRegistry, authTokenService, host, port: boundPort, close };
+  return {
+    app,
+    core,
+    embeddedSessionHost: {
+      lifecycle: core.accessor.get(ISessionLifecycleService),
+      hostFileSystem: core.accessor.get(IHostFileSystem),
+    },
+    connectionRegistry,
+    authTokenService,
+    host,
+    port: boundPort,
+    close,
+  };
 }
 
 /**

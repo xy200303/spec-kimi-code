@@ -14,8 +14,10 @@ import { Disposable } from '#/_base/di/lifecycle';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
 import { IAgentContextMemoryService } from '#/agent/contextMemory/contextMemory';
 import type { ContextMessage } from '#/agent/contextMemory/types';
+import { SPEC_CODING_FLAG_ID } from '#/agent/plan/flag';
 import { IAgentPlanService } from '#/agent/plan/plan';
 import type { PlanFilePath } from '#/agent/plan/plan';
+import { IFlagService } from '#/app/flag/flag';
 import PLAN_MODE_EXIT_REMINDER from './plan-mode-exit-reminder.md?raw';
 import PLAN_MODE_FULL_REMINDER from './plan-mode-full-reminder.md?raw';
 import PLAN_MODE_INLINE_FULL_REMINDER from './plan-mode-inline-full-reminder.md?raw';
@@ -33,6 +35,7 @@ export class PlanModeInjection extends Disposable {
     @IAgentContextInjectorService dynamicInjector: IAgentContextInjectorService,
     @IAgentPlanService private readonly plan: IAgentPlanService,
     @IAgentContextMemoryService private readonly context: IAgentContextMemoryService,
+    @IFlagService private readonly flags: IFlagService,
   ) {
     super();
 
@@ -46,16 +49,18 @@ export class PlanModeInjection extends Disposable {
           return PLAN_MODE_EXIT_REMINDER;
         }
         const planFilePath = data.path;
+        const isSpecification =
+          data.deliveryPath !== undefined && this.flags.enabled(SPEC_CODING_FLAG_ID);
         if (!wasActive) {
           wasActive = true;
           if (data.content.trim().length > 0) {
-            return reentryReminder(planFilePath);
+            return reentryReminder(planFilePath, isSpecification);
           }
-          return fullReminder(planFilePath);
+          return fullReminder(planFilePath, isSpecification);
         }
         const variant = planModeReminderVariant(injectedAt, this.context.get());
-        if (variant === 'full') return fullReminder(planFilePath);
-        if (variant === 'sparse') return sparseReminder(planFilePath);
+        if (variant === 'full') return fullReminder(planFilePath, isSpecification);
+        if (variant === 'sparse') return sparseReminder(planFilePath, isSpecification);
         return undefined;
       }),
     );
@@ -86,28 +91,76 @@ function planModeReminderVariant(
   return null;
 }
 
-function withPlanFileFooter(body: string, planFilePath: PlanFilePath): string {
+function withPlanFileFooter(
+  body: string,
+  planFilePath: PlanFilePath,
+  isSpecification: boolean,
+): string {
   if (planFilePath === null || planFilePath.length === 0) return body;
-  return `${body}\n\nPlan file: ${planFilePath}`;
+  const label = isSpecification ? 'Specification file' : 'Plan file';
+  return `${body}\n\n${label}: ${planFilePath}`;
 }
 
-function fullReminder(planFilePath: PlanFilePath): string {
+function fullReminder(planFilePath: PlanFilePath, isSpecification: boolean): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return PLAN_MODE_INLINE_FULL_REMINDER;
   }
-  return withPlanFileFooter(PLAN_MODE_FULL_REMINDER, planFilePath);
+  return withPlanFileFooter(
+    isSpecification ? SPECIFICATION_FULL_REMINDER : PLAN_MODE_FULL_REMINDER,
+    planFilePath,
+    isSpecification,
+  );
 }
 
-function sparseReminder(planFilePath: PlanFilePath): string {
+function sparseReminder(planFilePath: PlanFilePath, isSpecification: boolean): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return PLAN_MODE_INLINE_SPARSE_REMINDER;
   }
-  return withPlanFileFooter(PLAN_MODE_SPARSE_REMINDER, planFilePath);
+  return withPlanFileFooter(
+    isSpecification ? SPECIFICATION_SPARSE_REMINDER : PLAN_MODE_SPARSE_REMINDER,
+    planFilePath,
+    isSpecification,
+  );
 }
 
-function reentryReminder(planFilePath: PlanFilePath): string {
+function reentryReminder(planFilePath: PlanFilePath, isSpecification: boolean): string {
   if (planFilePath === null || planFilePath.length === 0) {
     return PLAN_MODE_INLINE_REENTRY_REMINDER;
   }
-  return withPlanFileFooter(PLAN_MODE_REENTRY_REMINDER, planFilePath);
+  return withPlanFileFooter(
+    isSpecification ? SPECIFICATION_REENTRY_REMINDER : PLAN_MODE_REENTRY_REMINDER,
+    planFilePath,
+    isSpecification,
+  );
 }
+
+const SPECIFICATION_FULL_REMINDER = `Plan mode is active. You MUST NOT make any edits (with the exception of the current specification file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call ExitPlanMode first if you need them.
+
+Workflow:
+  1. Understand — explore the codebase with Glob, Grep, Read.
+  2. Design — converge on the best approach; consider trade-offs but aim for a single recommendation.
+  3. Review — re-read key files to verify understanding.
+  4. Write Specification — fill in the frontmatter (type, priority, mode), preserve the 用户原始描述, complete the 目标 and 验收标准 sections, and break the work into the 任务清单 checklist. Record sensible defaults in 关键决策 and unresolved high-risk questions in 待确认问题.
+  5. Exit — call ExitPlanMode for user approval.
+
+## Handling multiple approaches
+Keep it focused: at most 2-3 meaningfully different approaches. Do NOT pad with minor variations — if one approach is clearly superior, just propose that one.
+When the best approach depends on user preferences, constraints, or context you don't have, use AskUserQuestion to clarify first. When you do include multiple approaches in the specification, you MUST pass them as the \`options\` parameter when calling ExitPlanMode.
+
+Use AskUserQuestion only for missing requirements or preferences that affect the specification. Never ask about plan approval via text or AskUserQuestion. Your turn must end with either AskUserQuestion (to clarify requirements or preferences) or ExitPlanMode (to request plan approval).`;
+
+const SPECIFICATION_SPARSE_REMINDER = `Plan mode still active (see full instructions earlier). Prefer read-only tools except the current specification file. Use Write or Edit to modify the specification, keeping its task checklist and key decisions current. Use Bash only when needed; Bash follows the normal permission mode and rules. Use AskUserQuestion only when clarification materially improves the specification. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for approval). Never ask about plan approval via text or AskUserQuestion.`;
+
+const SPECIFICATION_REENTRY_REMINDER = `Plan mode is active. You MUST NOT make any edits (with the exception of the current specification file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.
+
+## Re-entering Plan Mode
+A specification from a previous planning session already exists.
+Before proceeding:
+  1. Read the existing specification to understand what was previously planned.
+  2. Evaluate the user's current request against that specification.
+  3. If it is the same task, update the existing specification; otherwise replace it with a fresh specification.
+  4. Use Write or Edit to keep the frontmatter, 用户原始描述, 目标, 验收标准, 任务清单, and 关键决策 complete.
+  5. Use AskUserQuestion only to clarify missing requirements or preferences that affect the specification.
+  6. Always edit the specification before calling ExitPlanMode.
+
+Your turn must end with either AskUserQuestion (to clarify requirements) or ExitPlanMode (to request plan approval).`;

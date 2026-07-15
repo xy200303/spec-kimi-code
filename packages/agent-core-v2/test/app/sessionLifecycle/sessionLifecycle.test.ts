@@ -16,6 +16,7 @@ import { type ScopedTestHost, createScopedTestHost, stubPair } from '#/_base/di/
 import { Event } from '#/_base/event';
 import { IBootstrapService } from '#/app/bootstrap/bootstrap';
 import { IConfigService } from '#/app/config/config';
+import { IFileEditService } from '#/app/edit/fileEdit';
 import { IHostEnvironment } from '#/os/interface/hostEnvironment';
 import { IHostFileSystem } from '#/os/interface/hostFileSystem';
 import { HostFileSystem } from '#/os/backends/node-local/hostFsService';
@@ -494,6 +495,46 @@ describe('SessionLifecycleService', () => {
     expect(ensureMcpReady).toHaveBeenCalledWith(mcpServers);
   });
 
+  it('create confines a caller-supplied host filesystem to the new session scope', async () => {
+    const svc = build();
+    const sessionHostFs = { _serviceBrand: undefined } as IHostFileSystem;
+
+    const handle = await svc.create({
+      sessionId: 's1',
+      workDir: '/tmp/proj',
+      hostFileSystem: sessionHostFs,
+    });
+
+    expect(handle.accessor.get(IHostFileSystem)).toBe(sessionHostFs);
+    expect(host?.app.accessor.get(IHostFileSystem)).not.toBe(sessionHostFs);
+  });
+
+  it('create binds file edits to the caller-supplied session filesystem', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    const sessionHostFs = {
+      _serviceBrand: undefined,
+      readText: () => Promise.resolve('before value'),
+      writeText,
+    } as unknown as IHostFileSystem;
+    const svc = build();
+
+    const handle = await svc.create({
+      sessionId: 's1',
+      workDir: '/tmp/proj',
+      hostFileSystem: sessionHostFs,
+    });
+    const result = await handle.accessor.get(IFileEditService).edit({
+      path: '/tmp/proj/file.ts',
+      displayPath: 'file.ts',
+      old_string: 'before',
+      new_string: 'after',
+      replace_all: false,
+    });
+
+    expect(result).toEqual({ ok: true, count: 1 });
+    expect(writeText).toHaveBeenCalledWith('/tmp/proj/file.ts', 'after value');
+  });
+
   it('create appends the session to the shared session_index.jsonl', async () => {
     const appended: unknown[] = [];
     const svc = build([
@@ -560,6 +601,32 @@ describe('SessionLifecycleService', () => {
 
     expect(resumed?.id).toBe('s1');
     expect(resumed?.accessor.get(ISessionContext).workspaceId).toBe(encodeWorkDirKey(workDir));
+  });
+
+  it('forwards caller-supplied MCP servers during a cold resume', async () => {
+    const ensureMcpReady = vi.fn(() => Promise.resolve());
+    const mcpServers = { docs: { transport: 'http', url: 'https://mcp.example.com' } } as const;
+    const svc = build([
+      stubPair(ISessionIndex, sessionIndexWithSummary('s1', '/tmp/proj')),
+      stubPair(IAgentLifecycleService, agentLifecycleWithMainStub()),
+      stubPair(ISessionMcpService, sessionMcpServiceStub(ensureMcpReady)),
+    ]);
+
+    await svc.resume('s1', { mcpServers });
+
+    expect(ensureMcpReady).toHaveBeenCalledWith(mcpServers);
+  });
+
+  it('applies a caller-supplied host filesystem during a cold resume', async () => {
+    const sessionHostFs = { _serviceBrand: undefined } as IHostFileSystem;
+    const svc = build([
+      stubPair(ISessionIndex, sessionIndexWithSummary('s1', '/tmp/proj')),
+      stubPair(IAgentLifecycleService, agentLifecycleWithMainStub()),
+    ]);
+
+    const handle = await svc.resume('s1', { hostFileSystem: sessionHostFs });
+
+    expect(handle?.accessor.get(IHostFileSystem)).toBe(sessionHostFs);
   });
 
   it('resumes with the persisted cwd and indexed workspace id when the registry root is stale', async () => {

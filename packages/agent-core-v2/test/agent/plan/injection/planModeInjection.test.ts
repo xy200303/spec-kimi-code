@@ -4,6 +4,7 @@ import { createFakeHostFs } from '../../../tools/fixtures/fake-exec';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
 import { IAgentContextMemoryService } from '#/agent/contextMemory/contextMemory';
 import type { ContextMessage } from '#/agent/contextMemory/types';
+import { SPEC_CODING_FLAG_ID } from '#/agent/plan/flag';
 import { IAgentPlanService } from '#/agent/plan/plan';
 import {
   createTestAgent,
@@ -53,21 +54,30 @@ function lastPlanReminder(context: IAgentContextMemoryService): string {
     .join('');
 }
 
+function specWorkflowMessages(context: IAgentContextMemoryService): readonly ContextMessage[] {
+  return context.get().filter((message) => {
+    return message.origin?.kind === 'injection' && message.origin.variant === 'spec_workflow';
+  });
+}
+
 describe('PlanModeService dynamic injection content', () => {
   let ctx: TestAgentContext;
   let context: IAgentContextMemoryService;
   let injector: InjectableDynamicInjector;
   let plan: IAgentPlanService;
   let readText: (path: string) => Promise<string>;
+  let specCodingEnabled: boolean;
 
   beforeEach(() => {
     readText = async () => '';
+    specCodingEnabled = false;
     ctx = createTestAgent(execEnvServices({
       hostFs: createFakeHostFs({
         mkdir: vi.fn().mockResolvedValue(undefined),
         readText: (path: string) => readText(path),
         writeText: vi.fn(async () => undefined),
       }),
+      flags: { enabled: (id) => specCodingEnabled && id === SPEC_CODING_FLAG_ID },
     }));
     context = ctx.get(IAgentContextMemoryService);
     injector = ctx.get(IAgentContextInjectorService) as unknown as InjectableDynamicInjector;
@@ -134,6 +144,30 @@ describe('PlanModeService dynamic injection content', () => {
 
     expect(lastPlanReminder(context)).toContain('Re-entering Plan Mode');
     expect(lastPlanReminder(context)).toContain('Read the existing plan file');
+  });
+
+  it('injects specification guidance when spec coding is enabled', async () => {
+    specCodingEnabled = true;
+    await plan.enter('spec-plan');
+
+    await injectDynamic(injector);
+
+    expect(lastPlanReminder(context)).toContain('current specification file');
+    expect(lastPlanReminder(context)).toContain('用户原始描述');
+    expect(lastPlanReminder(context)).toContain('Specification file:');
+  });
+
+  it('injects the adaptive spec workflow once when spec coding is enabled', async () => {
+    specCodingEnabled = true;
+
+    await injectDynamic(injector);
+    await injectDynamic(injector);
+
+    expect(specWorkflowMessages(context)).toHaveLength(1);
+    expect(specWorkflowMessages(context)[0]?.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Adaptive intent clarification'),
+    });
   });
 });
 

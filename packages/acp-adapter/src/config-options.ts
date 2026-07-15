@@ -34,10 +34,10 @@
  */
 
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
-import type { KimiHarness } from '@moonshot-ai/kimi-code-sdk';
 
+import type { AcpEngine } from './engine';
 import { ACP_MODES, type AcpModeId } from './modes';
-import { listModelsFromHarness, type AcpModelEntry } from './model-catalog';
+import { listModelsFromEngine, type AcpModelEntry } from './model-catalog';
 
 /**
  * Project the catalog into the `SessionConfigOption` `model` arm.
@@ -184,12 +184,12 @@ export function buildModeOption(currentModeId: AcpModeId): SessionConfigOption {
  * mutate it.
  */
 export async function buildSessionConfigOptions(
-  harness: KimiHarness,
+  engine: AcpEngine,
   currentBaseModelId: string,
   currentThinkingEnabled: boolean,
   currentModeId: AcpModeId,
 ): Promise<SessionConfigOption[]> {
-  const models = await listModelsFromHarness(harness);
+  const models = await listModelsFromEngine(engine);
   const currentModelEntry = models.find((m) => m.id === currentBaseModelId);
   const showThinking = currentModelEntry?.thinkingSupported === true;
   const alwaysThinking = currentModelEntry?.alwaysThinking === true;

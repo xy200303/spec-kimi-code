@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
 import { IAgentContextMemoryService } from '#/agent/contextMemory/contextMemory';
 import { IAgentPlanService, type PlanData } from '#/agent/plan/plan';
+import { SPEC_CODING_FLAG_ID } from '#/agent/plan/flag';
 import { IAgentPermissionRulesService } from '#/agent/permissionRules/permissionRules';
 import { IAgentProfileService } from '#/agent/profile/profile';
 import { IAgentScopeContext } from '#/agent/scopeContext/scopeContext';
@@ -81,15 +82,18 @@ describe('Plan service', () => {
   let permissionRules: IAgentPermissionRulesService;
   let plan: IAgentPlanService;
   let profile: IAgentProfileService;
+  let specCodingEnabled: boolean;
   let tempDirs: string[];
 
   beforeEach(() => {
     activeFakes = createPlanFakes();
+    specCodingEnabled = false;
     tempDirs = [];
     ctx = createTestAgent(
       execEnvServices({
         hostFs: delegatingFs(),
         processRunner: delegatingRunner(),
+        flags: { enabled: (id) => specCodingEnabled && id === SPEC_CODING_FLAG_ID },
       }),
     );
     context = ctx.get(IAgentContextMemoryService);
@@ -253,6 +257,48 @@ describe('Plan service', () => {
       await expectPlanActive(true);
       expect(ctx.llmCalls).toHaveLength(2);
       expect(toolResultText(ctx.llmCalls[1]!.history)).toContain('Plan mode is now active');
+    });
+
+    it('creates workspace-local specification and delivery documents when spec coding is enabled', async () => {
+      specCodingEnabled = true;
+      const { files, writeText, fakes } = createPlanFileFakes(new Map(), {
+        stat: vi.fn(async () => {
+          throw new Error('ENOENT');
+        }),
+      });
+      useFakes(fakes);
+
+      await plan.enter('acp-v2-engine');
+
+      const root = join(ctx.get(ISessionContext).cwd, 'specs', 'acp-v2-engine');
+      const status = await expectActivePlan();
+      expect(status).toMatchObject({
+        id: 'acp-v2-engine',
+        path: join(root, 'spec.md'),
+        deliveryPath: join(root, 'delivery.md'),
+      });
+      expect(files.get(join(root, 'spec.md'))).toContain('## 用户原始描述');
+      expect(files.get(join(root, 'delivery.md'))).toContain('# 交付记录');
+      expect(writeText).toHaveBeenCalledTimes(2);
+    });
+
+    it('adds a numeric suffix when the requested specification directory already exists', async () => {
+      specCodingEnabled = true;
+      const requested = join(ctx.get(ISessionContext).cwd, 'specs', 'acp-v2-engine');
+      useFakes(createPlanFakes({
+        stat: vi.fn(async (path: string) => {
+          if (path === requested) return { isFile: false, isDirectory: true, size: 0 };
+          throw new Error('ENOENT');
+        }),
+        writeText: vi.fn(async () => {}),
+      }));
+
+      await plan.enter('acp-v2-engine');
+
+      expect(await expectActivePlan()).toMatchObject({
+        id: 'acp-v2-engine-2',
+        path: join(ctx.get(ISessionContext).cwd, 'specs', 'acp-v2-engine-2', 'spec.md'),
+      });
     });
   });
 

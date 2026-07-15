@@ -172,6 +172,7 @@ export * from '#/activity/activityOps';
 import '#/activity/agentActivityService';
 import '#/activity/sessionActivityKernel';
 import '#/agent/plan/profile/plan';
+import '#/agent/plan/flag';
 import '#/agent/plan/tools/enter-plan-mode';
 import '#/agent/plan/tools/exit-plan-mode';
 import '#/agent/plan/configSection';

@@ -17,23 +17,50 @@
  *    the agent binary with the advertised `args:['--login']` appended.
  *  - On stream close or unhandled error the process exits with the
  *    appropriate code.
+ *  - `--engine v2` starts an in-process `kap-server` and bridges the ACP
+ *    adapter to the v2 DI × Scope engine over `/api/v2`.
  */
+
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { Command } from 'commander';
 
 import {
   ACP_BUILTIN_SLASH_COMMANDS,
   runAcpServer,
+  V1AcpEngine,
+  V2AcpEngine,
+  type AcpEngineSession,
   type AvailableCommand,
   type SlashCommandsSnapshot,
 } from '@moonshot-ai/acp-adapter';
-import { createKimiHarness, type Session, type SkillSummary } from '@moonshot-ai/kimi-code-sdk';
+import { createKimiHarness, type SkillSummary } from '@moonshot-ai/kimi-code-sdk';
+import { startServer, type RunningServer } from '@moonshot-ai/kap-server';
 
 import { KIMI_CODE_HOME_ENV } from '#/constant/app';
 import { createKimiCodeHostIdentity, getVersion } from '#/cli/version';
 import { buildSkillSlashCommands } from '#/tui/commands/skills';
 
 import { runLoginFlow } from './login-flow';
+
+class ManagedV2AcpEngine extends V2AcpEngine {
+  constructor(
+    options: ConstructorParameters<typeof V2AcpEngine>[0],
+    private readonly server: RunningServer,
+  ) {
+    super(options);
+  }
+
+  override async close(): Promise<void> {
+    try {
+      await super.close();
+    } finally {
+      await this.server.close();
+    }
+  }
+}
 
 export function registerAcpCommand(parent: Command): void {
   parent
@@ -44,46 +71,40 @@ export function registerAcpCommand(parent: Command): void {
       'Run the device-code login flow then exit (entry point for ACP terminal-auth).',
       false,
     )
-    .action(async (opts: { login?: boolean }) => {
+    .option(
+      '--engine <engine>',
+      'Backend engine to use: v1 (legacy SDK, default) or v2 (kap-server /api/v2).',
+    )
+    .action(async (opts: { login?: boolean; engine?: string }) => {
       if (opts.login === true) {
         await runLoginFlow();
         return;
       }
-      const identity = createKimiCodeHostIdentity();
-      const harness = createKimiHarness({
-        identity,
-        uiMode: 'acp',
-      });
+      const engineName = opts.engine ?? process.env['KIMI_ACP_ENGINE'] ?? 'v1';
+      const engine = await buildEngine(engineName);
       // Forward `KIMI_CODE_HOME` (if set) into `authMethods[0].env` so the
       // `kimi login` subprocess clients spawn for terminal-auth writes its
       // token under the same data root the ACP server reads from. Used for
-      // sandboxed test setups (Zed's `agent_servers.*.env.KIMI_CODE_HOME =
-      // /tmp/...`). Production runs leave the env unset and the field stays
-      // empty.
+      // sandboxed test setups. Production runs leave the env unset and the
+      // field stays empty.
       const sandboxHome = process.env[KIMI_CODE_HOME_ENV];
       const terminalAuthEnv =
         sandboxHome !== undefined && sandboxHome.length > 0
           ? { [KIMI_CODE_HOME_ENV]: sandboxHome }
           : undefined;
       // Legacy `_meta.terminal-auth` fallback for clients that don't yet
-      // honor the first-class `type:'terminal'` (Zed without the
-      // AcpBetaFeatureFlag, current JetBrains plugin, etc.). `command` is
-      // the absolute path to this very binary (`process.argv[1]`) so the
-      // client can spawn it with `args:['login']` for the top-level
-      // `kimi login` subcommand — matches kimi-cli `acp/server.py:77-96`.
+      // honor the first-class `type:'terminal'`. `command` is the absolute
+      // path to this binary so the client can spawn it with `args:['login']`.
       const legacyCommand = process.argv[1];
       const builtinCommands: AvailableCommand[] = (ACP_BUILTIN_SLASH_COMMANDS as readonly AvailableCommand[]).map((cmd) => ({
         name: cmd.name,
         description: cmd.description,
         input: cmd.input,
       }));
-      // Skills are session-scoped (per-cwd config), so we defer the
-      // listSkills() call until the adapter hands us the just-created
-      // Session — mirrors opencode's per-directory snapshot. A
-      // listSkills() failure degrades to builtins-only so a broken
-      // skill source never blanks the palette.
+      // Skills are session-scoped, so defer discovery until the adapter hands
+      // us the just-created session. Failure degrades to builtins-only.
       const resolveSlashCommands = async (
-        session: Session,
+        session: AcpEngineSession,
       ): Promise<SlashCommandsSnapshot> => {
         let skills: readonly SkillSummary[] = [];
         try {
@@ -91,13 +112,8 @@ export function registerAcpCommand(parent: Command): void {
         } catch {
           skills = [];
         }
-        // `buildSkillSlashCommands` already returns both views — the
-        // palette entries (advertised via `available_commands_update`)
-        // and the `commandName → skillName` map the adapter uses to
-        // intercept `/skill:<name>` inputs and route them to
-        // `Session.activateSkill`. Passing both through keeps the two
-        // surfaces in lockstep (palette ↔ interceptable set) without
-        // a second `listSkills()` round trip.
+        // Keep the advertised palette and the command-to-skill routing map in
+        // lockstep from the same snapshot.
         const built = buildSkillSlashCommands(skills);
         const skillCommands = built.commands.map((cmd) => ({
           name: cmd.name,
@@ -109,18 +125,47 @@ export function registerAcpCommand(parent: Command): void {
         };
       };
       try {
-        await runAcpServer(harness, {
+        await runAcpServer(engine, {
           agentInfo: { name: 'Kimi Code CLI', version: getVersion() },
           slashCommands: resolveSlashCommands,
-          ...(terminalAuthEnv ? { terminalAuthEnv } : {}),
+          terminalAuthEnv,
           ...(legacyCommand !== undefined && legacyCommand.length > 0
             ? { terminalAuthLegacyCommand: legacyCommand }
             : {}),
         });
         process.exit(0);
-      } catch (err) {
-        process.stderr.write(`acp server: fatal error: ${String(err)}\n`);
+      } catch (error) {
+        process.stderr.write(`acp server: fatal error: ${String(error)}\n`);
         process.exit(1);
       }
     });
+}
+
+async function buildEngine(engineName: string): Promise<import('@moonshot-ai/acp-adapter').AcpEngine> {
+  if (engineName === 'v2') {
+    const server = await startServer({
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+      lockPath: join(tmpdir(), 'kimi-code-acp', `${process.pid}-${randomUUID()}.lock`),
+      version: getVersion(),
+    });
+    return new ManagedV2AcpEngine(
+      {
+        url: `http://127.0.0.1:${server.port}`,
+        token: server.authTokenService.getToken(),
+        embeddedHost: server.embeddedSessionHost,
+      },
+      server,
+    );
+  }
+  if (engineName !== 'v1') {
+    throw new Error(`Unsupported ACP engine: ${engineName}. Expected "v1" or "v2".`);
+  }
+  const identity = createKimiCodeHostIdentity();
+  const harness = createKimiHarness({
+    identity,
+    uiMode: 'acp',
+  });
+  return new V1AcpEngine(harness);
 }

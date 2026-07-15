@@ -12,6 +12,16 @@ spec-kimi acp
 你通常不需要手动跑 `spec-kimi acp`——这个命令是给 IDE 的子进程入口准备的。IDE 端的配置见[在 IDE 中使用](../guides/ides.md)。
 :::
 
+## 引擎选择
+
+ACP 默认使用 v1 引擎。实验性的 v2 引擎在 DI × Scope 后端上提供相同的 ACP 协议面，并支持由客户端管理文件读取和写入。配置 ACP 子进程时，显式选择 v2：
+
+```sh
+spec-kimi acp --engine v2
+```
+
+也可以设置 `KIMI_ACP_ENGINE=v2`，无需修改子进程参数即可选择 v2。两者同时存在时，`--engine` 优先。使用 `--engine v1` 可显式选择旧版后端。
+
 ## 能力矩阵
 
 下表列出当前 ACP 适配层声明的能力。`agentCapabilities` 字段在 `initialize` 响应里完整返回，IDE 端可据此调整 UI。
@@ -58,6 +68,10 @@ spec-kimi acp
 | `fs/read_text_file` | 是 | kaos 层文件读取路由到客户端（通过 `fsCapabilities` 公告） |
 | `fs/write_text_file` | 是 | kaos 层文件写入路由到客户端 |
 | `terminal/create` · `output` · `release` · `kill` · `wait_for_exit` | 否 | 终端 reverse-RPC 未接，shell 命令走本地执行 |
+
+### 扩展
+
+适配层接受 `ext/steer` 和 `moonshot.ai/steer` 通知。客户端可通过任一通知发送 prompt 内容，在不取消当前轮次的情况下实时控制正在执行的轮次。两种通知都需要当前 `sessionId`；推荐使用 `content` 载荷字段，同时继续接受 `prompt` 以保持兼容。
 
 ### 不稳定面（1 / 19）
 

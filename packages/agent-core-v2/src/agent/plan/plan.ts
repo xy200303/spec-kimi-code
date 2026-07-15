@@ -4,6 +4,7 @@ export type PlanData = null | {
   readonly id: string;
   readonly content: string;
   readonly path: string;
+  readonly deliveryPath?: string;
 };
 
 export type PlanFilePath = string | null;

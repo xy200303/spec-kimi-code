@@ -12,6 +12,16 @@ Once started, the command prints no banner and immediately waits for the ACP cli
 You typically do not need to run `spec-kimi acp` manually — this command is the subprocess entry point for IDEs. For IDE-side configuration, see [Using in IDEs](../guides/ides.md).
 :::
 
+## Engine selection
+
+ACP uses the v1 engine by default. The experimental v2 engine runs the same ACP protocol surface on the DI and Scope backend, including client-managed file reads and writes. Select it explicitly when configuring the ACP subprocess:
+
+```sh
+spec-kimi acp --engine v2
+```
+
+Set `KIMI_ACP_ENGINE=v2` to select v2 without changing the subprocess arguments. When both are present, `--engine` takes precedence. Use `--engine v1` to select the legacy backend explicitly.
+
 ## Capability Matrix
 
 The table below lists the capabilities declared by the current ACP adapter layer. The `agentCapabilities` field is returned in full in the `initialize` response, so the IDE can adjust its UI accordingly.
@@ -58,6 +68,10 @@ The spec divides methods into a **stable** surface and an evolving **unstable** 
 | `fs/read_text_file` | Yes | File reads at the kaos layer are routed to the client (advertised via `fsCapabilities`) |
 | `fs/write_text_file` | Yes | File writes at the kaos layer are routed to the client |
 | `terminal/create` · `output` · `release` · `kill` · `wait_for_exit` | No | Terminal reverse-RPC not connected; shell commands use local execution |
+
+### Extensions
+
+The adapter accepts the `ext/steer` and `moonshot.ai/steer` notifications. A client can send prompt content through either notification to steer the active turn without cancelling it. Both notifications require the current `sessionId`; `content` is the preferred payload field and `prompt` remains accepted for compatibility.
 
 ### Unstable surface (1 / 19)
 

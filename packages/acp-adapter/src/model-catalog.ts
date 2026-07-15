@@ -25,6 +25,8 @@
 import { effectiveModelAlias } from '@moonshot-ai/agent-core';
 import type { KimiHarness, ModelAlias } from '@moonshot-ai/kimi-code-sdk';
 
+import type { AcpEngine } from './engine';
+
 /**
  * One catalog row per configured model alias, suitable for an ACP
  * picker. `description` is left optional so the harness can populate it
@@ -98,6 +100,17 @@ export function deriveDefaultThinkingEffort(alias: ModelAlias): string {
  * degenerate config without forcing every test stub to provide every
  * field.
  */
+function modelAliasToEntry(id: string, alias: ModelAlias): AcpModelEntry {
+  const effective = effectiveModelAlias(alias);
+  return {
+    id,
+    name: effective.displayName ?? effective.model ?? id,
+    thinkingSupported: deriveThinkingSupported(alias),
+    alwaysThinking: deriveAlwaysThinking(alias),
+    defaultThinkingEffort: deriveDefaultThinkingEffort(alias),
+  };
+}
+
 export async function listModelsFromHarness(
   harness: KimiHarness,
 ): Promise<readonly AcpModelEntry[]> {
@@ -112,14 +125,32 @@ export async function listModelsFromHarness(
   if (models === undefined) return [];
   const out: AcpModelEntry[] = [];
   for (const [id, alias] of Object.entries(models)) {
-    const effective = effectiveModelAlias(alias);
-    out.push({
-      id,
-      name: effective.displayName ?? effective.model ?? id,
-      thinkingSupported: deriveThinkingSupported(alias),
-      alwaysThinking: deriveAlwaysThinking(alias),
-      defaultThinkingEffort: deriveDefaultThinkingEffort(alias),
-    });
+    out.push(modelAliasToEntry(id, alias));
+  }
+  return out;
+}
+
+export async function listModelsFromEngine(
+  engine: AcpEngine,
+): Promise<readonly AcpModelEntry[]> {
+  if (typeof engine.listModels !== 'function') return [];
+  let aliases: Record<string, ModelAlias> | Readonly<Record<string, ModelAlias>> | readonly ModelAlias[] | undefined;
+  try {
+    aliases = await engine.listModels();
+  } catch {
+    return [];
+  }
+  if (aliases === undefined) return [];
+  const out: AcpModelEntry[] = [];
+  if (Array.isArray(aliases)) {
+    for (const alias of aliases) {
+      const id = alias.model ?? 'unknown';
+      out.push(modelAliasToEntry(id, alias));
+    }
+  } else {
+    for (const [id, alias] of Object.entries(aliases)) {
+      out.push(modelAliasToEntry(id, alias));
+    }
   }
   return out;
 }

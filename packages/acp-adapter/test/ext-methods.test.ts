@@ -1,3 +1,9 @@
+/**
+ * Scenario: ACP extension requests are dispatched over the protocol surface.
+ *
+ * Uses in-memory ACP streams and stubs only the engine session boundary.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -13,9 +19,10 @@ import {
   type WriteTextFileRequest,
   type WriteTextFileResponse,
 } from '@agentclientprotocol/sdk';
-import type { KimiHarness } from '@moonshot-ai/kimi-code-sdk';
+import type { KimiHarness, PromptInput, Session } from '@moonshot-ai/kimi-code-sdk';
 
 import { AcpServer } from '../src/server';
+import { AUTHED_STATUS } from './_helpers/harness-stubs';
 
 class StubClient implements Client {
   async requestPermission(_p: RequestPermissionRequest): Promise<RequestPermissionResponse> {
@@ -49,6 +56,20 @@ function makeMinimalHarness(): KimiHarness {
   return {} as unknown as KimiHarness;
 }
 
+function makeSteerHarness(steered: PromptInput[]): KimiHarness {
+  return {
+    auth: { status: async () => AUTHED_STATUS },
+    createSession: async (options: { id?: string }) =>
+      ({
+        id: options.id ?? 'session-steer',
+        steer: async (input: PromptInput) => {
+          steered.push(input);
+        },
+      }) as Session,
+    getConfig: async () => ({ providers: {}, models: {} }),
+  } as unknown as KimiHarness;
+}
+
 describe('AcpServer ext method surface', () => {
   it('unit-level extMethod throws RequestError.methodNotFound with the method name', async () => {
     const server = new AcpServer(makeMinimalHarness());
@@ -79,5 +100,24 @@ describe('AcpServer ext method surface', () => {
     await expect(client.extMethod('myorg.unsupported', {})).rejects.toMatchObject({
       code: -32601,
     });
+  });
+
+  it('forwards ext/steer content for an open session', async () => {
+    const steered: PromptInput[] = [];
+    const { agentStream, clientStream } = makeInMemoryStreamPair();
+
+    new AgentSideConnection(
+      (connection) => new AcpServer(makeSteerHarness(steered), connection),
+      agentStream,
+    );
+    const client = new ClientSideConnection((_agent) => new StubClient(), clientStream);
+    const session = await client.newSession({ cwd: '/tmp/work', mcpServers: [] });
+
+    await client.extMethod('ext/steer', {
+      sessionId: session.sessionId,
+      content: [{ type: 'text', text: 'Focus on the failing test.' }],
+    });
+
+    expect(steered).toEqual([[{ type: 'text', text: 'Focus on the failing test.' }]]);
   });
 });

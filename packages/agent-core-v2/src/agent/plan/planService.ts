@@ -16,8 +16,11 @@ import { unwrapErrorCause } from '#/_base/errors/errors';
 import { generateHeroSlug } from '#/_base/utils/hero-slug';
 import { IAgentContextMemoryService } from '#/agent/contextMemory/contextMemory';
 import { IAgentContextInjectorService } from '#/agent/contextInjector/contextInjector';
+import { SPEC_CODING_FLAG_ID } from '#/agent/plan/flag';
 import { PlanModeInjection } from '#/agent/plan/injection/planModeInjection';
+import { SpecWorkflowInjection } from '#/agent/plan/injection/specWorkflowInjection';
 import { IAgentScopeContext } from '#/agent/scopeContext/scopeContext';
+import { IFlagService } from '#/app/flag/flag';
 import { IAgentTelemetryContextService } from '#/app/telemetry/agentTelemetryContext';
 import { IHostFileSystem } from '#/os/interface/hostFileSystem';
 import { ISessionContext } from '#/session/sessionContext/sessionContext';
@@ -34,6 +37,8 @@ import {
   planModeExit,
 } from './planOps';
 
+const SPEC_NAME_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
+
 export class AgentPlanService extends Disposable implements IAgentPlanService {
   declare readonly _serviceBrand: undefined;
 
@@ -41,6 +46,7 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
     @IAgentContextMemoryService private readonly context: IAgentContextMemoryService,
     @IHostFileSystem private readonly hostFs: IHostFileSystem,
     @IAgentContextInjectorService dynamicInjector: IAgentContextInjectorService,
+    @IFlagService private readonly flags: IFlagService,
     @IAgentTelemetryContextService private readonly telemetryContext: IAgentTelemetryContextService,
     @IWireService private readonly wire: IWireService,
     @ISessionContext private readonly sessionCtx: ISessionContext,
@@ -55,7 +61,8 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
       }),
     );
 
-    this._register(new PlanModeInjection(dynamicInjector, this, this.context));
+    this._register(new PlanModeInjection(dynamicInjector, this, this.context, this.flags));
+    this._register(new SpecWorkflowInjection(dynamicInjector, this.flags, this.agentCtx.agentId));
   }
 
   private get isActive(): boolean {
@@ -65,7 +72,7 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
   private currentPlanFilePath(): PlanFilePath {
     const state = this.wire.getModel(PlanModel);
     if (!state.active || state.id === undefined) return null;
-    return this.planFilePathFor(state.id);
+    return this.specDocumentsFor(state.id)?.spec ?? this.planFilePathFor(state.id);
   }
 
   private restoreTelemetryMode(): void {
@@ -78,24 +85,30 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
     return generateHeroSlug(randomUUID(), new Set());
   }
 
-  async enter(id = this.createPlanId(), createFile = false): Promise<void> {
+  async enter(id?: string, createFile = false): Promise<void> {
     if (this.isActive) {
       throw new Error('Already in plan mode');
     }
 
-    const planFilePath = this.planFilePathFor(id);
+    const planId = await this.resolvePlanId(id);
+    const specDocuments = this.specDocumentsFor(planId);
+    const planFilePath = specDocuments?.spec ?? this.planFilePathFor(planId);
     let enterRecorded = false;
     try {
       await this.ensurePlanDirectory(planFilePath);
-      this.wire.dispatch(planModeEnter({ id }));
+      this.wire.dispatch(planModeEnter({ id: planId }));
       this.telemetryContext.set({ mode: 'plan' });
       enterRecorded = true;
-      if (createFile) {
+      if (specDocuments !== undefined) {
+        const date = new Date().toISOString().slice(0, 10);
+        await this.hostFs.writeText(specDocuments.spec, specTemplate(planId, date));
+        await this.hostFs.writeText(specDocuments.delivery, deliveryTemplate(planId));
+      } else if (createFile) {
         await this.writeEmptyPlanFile(planFilePath);
       }
     } catch (error) {
       if (enterRecorded) {
-        this.cancel(id);
+        this.cancel(planId);
       }
       throw error;
     }
@@ -120,7 +133,8 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
   async status(): Promise<PlanData> {
     const state = this.wire.getModel(PlanModel);
     if (!state.active || state.id === undefined) return null;
-    const path = this.planFilePathFor(state.id);
+    const specDocuments = this.specDocumentsFor(state.id);
+    const path = specDocuments?.spec ?? this.planFilePathFor(state.id);
     let content = '';
     try {
       content = await this.hostFs.readText(path);
@@ -131,11 +145,36 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
       id: state.id,
       content,
       path,
+      deliveryPath: specDocuments?.delivery,
     };
+  }
+
+  private async resolvePlanId(id: string | undefined): Promise<string> {
+    if (!this.flags.enabled(SPEC_CODING_FLAG_ID)) return id ?? this.createPlanId();
+    if (id === undefined || !SPEC_NAME_PATTERN.test(id)) return this.createPlanId();
+
+    let candidate = id;
+    for (let suffix = 2; ; suffix += 1) {
+      try {
+        await this.hostFs.stat(join(this.sessionCtx.cwd, 'specs', candidate));
+        candidate = `${id}-${suffix}`;
+      } catch {
+        return candidate;
+      }
+    }
   }
 
   private planFilePathFor(id: string): string {
     return join(this.sessionCtx.sessionDir, 'agents', this.agentCtx.agentId, 'plans', `${id}.md`);
+  }
+
+  private specDocumentsFor(id: string): { readonly spec: string; readonly delivery: string } | undefined {
+    if (!this.flags.enabled(SPEC_CODING_FLAG_ID)) return undefined;
+    const root = join(this.sessionCtx.cwd, 'specs', id);
+    return {
+      spec: join(root, 'spec.md'),
+      delivery: join(root, 'delivery.md'),
+    };
   }
 
   private async writeEmptyPlanFile(path: string): Promise<void> {
@@ -146,6 +185,82 @@ export class AgentPlanService extends Disposable implements IAgentPlanService {
   private async ensurePlanDirectory(path: string): Promise<void> {
     await this.hostFs.mkdir(dirname(path), { recursive: true });
   }
+}
+
+function specTemplate(id: string, date: string): string {
+  return `---
+id: ${id}
+type: feature          # feature | bugfix | optimize | refactor | docs
+status: in_progress    # pending | in_progress | done | cancelled
+priority: p2           # p0 | p1 | p2 | p3
+mode: standard         # prototype | standard | strict
+author: user
+created: ${date}
+updated: ${date}
+---
+
+# <标题>
+
+## 用户原始描述
+
+## 目标
+
+## 验收标准
+
+- [ ]
+
+## 约束条件
+
+## 技术选型
+
+| 组件 | 选择 | 理由 |
+|------|------|------|
+
+## 任务清单
+
+### 进行中
+
+### 已完成
+
+### 待开始
+
+- [ ]
+
+## 风险与应对
+
+| 风险 | 概率 | 影响 | 应对方案 |
+|------|------|------|----------|
+
+## 关键决策
+
+## 待确认问题
+`;
+}
+
+function deliveryTemplate(id: string): string {
+  return `---
+spec-id: ${id}
+version: 1.0.0
+status: draft          # draft | completed
+completed-at:
+---
+
+# 交付记录
+
+## 实现方案
+
+## 边界条件
+
+## 测试验证
+
+## 代码评审
+
+## 已知问题
+
+## 回滚方案
+
+## 变更文件
+`;
 }
 
 function isMissingFileError(error: unknown): boolean {

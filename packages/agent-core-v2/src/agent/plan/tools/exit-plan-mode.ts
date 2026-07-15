@@ -74,11 +74,17 @@ export const ExitPlanModeInputSchema: z.ZodType<ExitPlanModeInput> = z
 
 export interface ExitPlanModePlanSource {
   plan: string;
-  path?: string | undefined;
+  path?: string;
+  deliveryPath?: string;
 }
 
 type ResolvePlanResult =
-  | { readonly ok: true; readonly plan: string; readonly path?: string | undefined }
+  | {
+    readonly ok: true;
+    readonly plan: string;
+    readonly path?: string;
+    readonly deliveryPath?: string;
+  }
   | { readonly ok: false; readonly error: ExecutableToolResult };
 
 
@@ -154,7 +160,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     this.telemetry.track2('plan_resolved', { outcome: 'approved' });
     return {
       isError: false,
-      output: `Exited plan mode. ${formatPlanForOutput(resolvedPlan.plan, resolvedPlan.path)}`,
+      output: `Exited plan mode. ${formatPlanForOutput(resolvedPlan.plan, resolvedPlan.path, resolvedPlan.deliveryPath)}`,
     };
   }
 
@@ -174,7 +180,9 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
     let source: ExitPlanModePlanSource | null;
     try {
       const data = await this.planMode.status();
-      source = data === null ? null : { plan: data.content, path: data.path };
+      source = data === null
+        ? null
+        : { plan: data.content, path: data.path, deliveryPath: data.deliveryPath };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to read plan file.';
       return {
@@ -188,6 +196,7 @@ export class ExitPlanModeTool implements BuiltinTool<ExitPlanModeInput> {
         ok: true,
         plan: source.plan,
         path: source.path,
+        deliveryPath: source.deliveryPath,
       };
     }
 
@@ -231,7 +240,10 @@ function formatAutoApprovedPlanForOutput(plan: string, path: string | undefined)
   return `Plan mode deactivated. All tools are now available.\nNote: this plan was auto-approved without user review — the user has NOT explicitly approved it. Follow the user's original instructions on whether to proceed with execution; if they asked you to stop, wait, or only summarize after planning, do not start executing.\n${savedTo}## Plan (auto-approved, not user-reviewed):\n${plan}`;
 }
 
-function formatPlanForOutput(plan: string, path: string | undefined): string {
+function formatPlanForOutput(plan: string, path?: string, deliveryPath?: string): string {
   const savedTo = path !== undefined ? `Plan saved to: ${path}\n\n` : '';
-  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}`;
+  const delivery = deliveryPath === undefined
+    ? ''
+    : `\n\nDuring implementation, keep the task checklist in the specification up to date — checking off a task is the progress record. After implementation and verification, complete the delivery record from its template: ${deliveryPath}`;
+  return `Plan mode deactivated. All tools are now available.\n${savedTo}## Approved Plan:\n${plan}${delivery}`;
 }

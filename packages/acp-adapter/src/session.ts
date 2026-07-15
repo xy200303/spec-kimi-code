@@ -17,17 +17,16 @@ import {
   type BackgroundTaskInfo,
   type ContextMessage,
   type Event,
-  type KimiHarness,
   type McpServerInfo,
   type PermissionMode,
   type PromptPart,
   type QuestionAnswers,
   type QuestionRequest,
-  type Session,
   type SessionStatus,
   type SessionUsage,
   type ThinkingEffort,
 } from '@moonshot-ai/kimi-code-sdk';
+import type { AcpEngineSession } from './engine';
 
 import {
   approvalRequestToPermissionOptions,
@@ -40,7 +39,7 @@ import {
   type AcpBuiltinSlashCommandName,
 } from './builtin-commands';
 import { buildSessionConfigOptions } from './config-options';
-import { listModelsFromHarness } from './model-catalog';
+import { listModelsFromEngine } from './model-catalog';
 import { acpBlocksToPromptParts, compressPromptImageParts } from './convert';
 import {
   acpToolCallId,
@@ -84,17 +83,10 @@ export type TelemetryTrackFn = (
  */
 export class AcpSession {
   /**
-   * The most recently observed turnId from the underlying SDK event
+   * The most recently observed turnId from the underlying engine event
    * stream. Used by {@link handleApproval} to compose the prefixed ACP
    * `toolCallId` (`${turnId}:${rawId}`) so the client can correlate the
    * permission prompt with the tool card it has already rendered.
-   *
-   * Updated inside the existing `onEvent` listener in {@link prompt}
-   * (any event carrying a numeric `turnId` advances the value), and
-   * reset to `undefined` on `turn.ended`. Approval flows are gated by
-   * the SDK on the active turn so a stale value is effectively
-   * unreachable in practice; the `undefined` fallback in
-   * `buildPermissionToolCallUpdate` exists for defence-in-depth.
    */
   private currentTurnId: number | undefined = undefined;
 
@@ -166,7 +158,7 @@ export class AcpSession {
 
   constructor(
     readonly conn: AgentSideConnection,
-    readonly session: Session,
+    readonly session: AcpEngineSession,
     /**
      * Capabilities the client declared during `initialize`. Passed in
      * by `AcpServer.newSession` so `prompt()` can decide whether to
@@ -196,15 +188,13 @@ export class AcpSession {
      */
     initialModelId?: string,
     /**
-     * Harness reference used by {@link emitConfigOptionUpdate} to
+     * Engine reference used by {@link emitConfigOptionUpdate} to
      * re-list available models when emitting the post-change snapshot.
      * Optional because adapter-level unit tests build `AcpSession`
-     * without a harness; when absent, `emitConfigOptionUpdate` is a
-     * silent no-op (matches the {@link safeTrack} pattern). Phase 14.3
-     * introduces this so the model + mode picker funnel can refresh
-     * the full SessionConfigOption[] snapshot on every change.
+     * without an engine; when absent, `emitConfigOptionUpdate` is a
+     * silent no-op.
      */
-    private readonly harness?: KimiHarness,
+    private readonly engine?: import('./engine').AcpEngine,
     /**
      * Initial value of the adapter-side thinking-toggle state, supplied
      * by the server when creating / loading the session. Phase 15
@@ -397,8 +387,8 @@ export class AcpSession {
    * explicit off request here.
    */
   private async thinkingOnEffort(): Promise<string> {
-    if (!this.harness) return 'on';
-    const models = await listModelsFromHarness(this.harness);
+    if (!this.engine) return 'on';
+    const models = await listModelsFromEngine(this.engine);
     return models.find((m) => m.id === this.currentModelIdInternal)?.defaultThinkingEffort ?? 'on';
   }
 
@@ -461,17 +451,17 @@ export class AcpSession {
    * the SDK call path still completes. The failure mode is symmetric
    * to {@link safeTrack}.
    *
-   * Errors during the underlying `listModelsFromHarness` call or
+   * Errors during the underlying `listModelsFromEngine` call or
    * the `sessionUpdate` push are caught and logged at `warn` — same
    * policy as {@link emitAvailableCommandsUpdate}: pushing a session
    * update is a streaming concern, not load-bearing for the SDK call
    * that triggered it.
    */
   private async emitConfigOptionUpdate(): Promise<void> {
-    if (!this.harness) return;
+    if (!this.engine) return;
     try {
       const snapshot = await buildSessionConfigOptions(
-        this.harness,
+        this.engine,
         this.currentModelIdInternal,
         this.currentThinkingEnabledInternal,
         this.currentModeIdInternal,
@@ -549,7 +539,7 @@ export class AcpSession {
     // when the tool result lands. Lives for the duration of one replay.
     const toolCallTurnIds = new Map<string, number>();
 
-    for (const message of agent.context.history) {
+    for (const message of agent.context?.history ?? []) {
       try {
         await this.replayMessage(message, sessionId, conn, {
           getTurnId: () => turnId,
@@ -742,7 +732,7 @@ export class AcpSession {
       parts = await compressPromptImageParts(acpBlocksToPromptParts(blocks), {
         originalsDir:
           sessionDir === undefined ? undefined : sessionMediaOriginalsDir(sessionDir),
-        maxImageEdgePx: this.harness?.imageLimits?.maxEdgePx(),
+        maxImageEdgePx: this.engine?.imageLimits?.maxEdgePx(),
         telemetry:
           track === undefined
             ? undefined
@@ -786,6 +776,42 @@ export class AcpSession {
     }
 
     return this.runTurnBody(sessionId, conn, () => this.session.prompt(parts));
+  }
+
+  /**
+   * Run an ACP `ext/steer` extension against the underlying session.
+   *
+   * Steer is a fire-and-forget turn injection: it compresses prompt images the
+   * same way {@link prompt} does, then forwards the parts to
+   * `Session.steer(...)`. The v1 SDK and v2 engine both expose `steer`; if the
+   * backend does not support it the call rejects.
+   */
+  async steer(blocks: readonly ContentBlock[]): Promise<void> {
+    const pending = { aborted: false };
+    this.pendingPromptAborts.add(pending);
+    let parts: readonly PromptPart[];
+    try {
+      const sessionDir = this.session.summary?.sessionDir;
+      const track = this.track;
+      parts = await compressPromptImageParts(acpBlocksToPromptParts(blocks), {
+        originalsDir:
+          sessionDir === undefined ? undefined : sessionMediaOriginalsDir(sessionDir),
+        maxImageEdgePx: this.engine?.imageLimits?.maxEdgePx(),
+        telemetry:
+          track === undefined
+            ? undefined
+            : {
+                track: (event, properties) =>
+                  track(event, properties === undefined ? undefined : { ...properties }),
+              },
+      });
+    } finally {
+      this.pendingPromptAborts.delete(pending);
+    }
+    if (pending.aborted) {
+      return;
+    }
+    await this.session.steer(parts);
   }
 
   private async runBuiltInCommand(

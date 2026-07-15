@@ -356,13 +356,22 @@ importers:
       '@moonshot-ai/agent-core':
         specifier: workspace:^
         version: link:../agent-core
+      '@moonshot-ai/agent-core-v2':
+        specifier: workspace:^
+        version: link:../agent-core-v2
       '@moonshot-ai/kaos':
         specifier: workspace:^
         version: link:../kaos
       '@moonshot-ai/kimi-code-sdk':
         specifier: workspace:^
         version: link:../node-sdk
+      '@moonshot-ai/klient':
+        specifier: workspace:^
+        version: link:../klient
     devDependencies:
+      '@moonshot-ai/kap-server':
+        specifier: workspace:^
+        version: link:../kap-server
       jimp:
         specifier: ^1.6.1
         version: 1.6.1
