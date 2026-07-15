@@ -11,6 +11,10 @@ updated: 2026-07-14
 
 # Agent Core 增加生图工具
 
+## 用户原始描述
+
+> 在 `packages/agent-core` 里新增一个内置生图工具 `GenerateImage`，让 Agent 能调用 OpenAI 兼容的 `/images/generations` 接口生成图片，下载到本地工作目录并返回路径。配置通过 `config.toml` 里的服务配置注入，默认不启用，只在配置存在时才向模型暴露。支持 `prompt`、`output_path` 以及可选的 `model`、`size`、`quality`、`style`、`n` 等参数；要能自动推断图片格式、处理路径安全、覆盖常见错误场景，并补充单元测试。
+
 ## 目标
 
 在 `packages/agent-core` 中新增一个名为 `GenerateImage` 的内置工具，让 Agent 能够调用 OpenAI 兼容的 `/images/generations` 接口生成图片，将图片下载到本地工作目录，并返回保存路径。配置、鉴权和后端实现通过现有的服务注入机制接入，保持 `agent-core` 与具体厂商实现解耦。
