@@ -1,15 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="120" height="120">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Spec Kimi logo</title>
+  <desc id="desc">A developer terminal prompt inside an engineering frame.</desc>
   <defs>
-    <linearGradient id="specGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f46e5"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
+    <linearGradient id="background" x1="31" y1="21" x2="222" y2="235" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#312E81"/>
+      <stop offset="1" stop-color="#0B1026"/>
     </linearGradient>
+    <linearGradient id="frame" x1="63" y1="56" x2="196" y2="203" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="prompt" x1="91" y1="93" x2="178" y2="169" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <filter id="glow" x="46" y="42" width="164" height="172" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
-  <rect width="100" height="100" rx="22" fill="url(#specGradient)"/>
-  <rect x="24" y="18" width="52" height="60" rx="6" fill="#ffffff"/>
-  <rect x="32" y="32" width="36" height="4" rx="2" fill="#4f46e5" opacity="0.9"/>
-  <rect x="32" y="42" width="28" height="4" rx="2" fill="#4f46e5" opacity="0.7"/>
-  <rect x="32" y="52" width="32" height="4" rx="2" fill="#4f46e5" opacity="0.5"/>
-  <circle cx="70" cy="72" r="14" fill="#10b981"/>
-  <path d="M64 72 L68 76 L76 68" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="256" height="256" rx="58" fill="url(#background)"/>
+  <g fill="#A5B4FC" opacity=".18">
+    <circle cx="52" cy="58" r="4"/>
+    <circle cx="76" cy="58" r="4"/>
+    <circle cx="52" cy="82" r="4"/>
+    <circle cx="204" cy="174" r="4"/>
+    <circle cx="180" cy="198" r="4"/>
+    <circle cx="204" cy="198" r="4"/>
+  </g>
+  <path d="M128 37L202 80V176L128 219L54 176V80L128 37Z" fill="#171A4B" stroke="url(#frame)" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M128 58L184 90V166L128 198L72 166V90L128 58Z" fill="#10163A" stroke="#6366F1" stroke-width="2" opacity=".85"/>
+  <g filter="url(#glow)" fill="none" stroke="url(#prompt)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M95 96L127 128L95 160" stroke-width="14"/>
+    <path d="M143 161H174" stroke-width="14"/>
+  </g>
+  <path d="M83 76L96 68" stroke="#5EEAD4" stroke-width="6" stroke-linecap="round"/>
+  <path d="M160 188L173 180" stroke="#A78BFA" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="128" cy="37" r="8" fill="#67E8F9"/>
+  <circle cx="202" cy="176" r="8" fill="#A78BFA"/>
 </svg>

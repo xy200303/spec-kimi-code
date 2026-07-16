@@ -27,6 +27,22 @@ spec-kimi --version
 
 请不要使用上游 `kimi` 的下载链接、Homebrew 命令或上游 npm 包来安装本发行版。
 
+如果要在仓库根目录安装本地构建出的包，可直接使用生成的 tarball：
+
+```sh
+npm install -g "./.tmp/spec-kimi-pack/dev_xiaoyun-spec-kimi-0.24.4.tgz"
+```
+
+## ACP 与 IDE 集成
+
+`spec-kimi acp` 是兼容 ACP 的 IDE 所启动的子进程入口。它默认使用 v2 引擎，支持流式回复、由客户端管理的文件读写和实时控制：
+
+```sh
+spec-kimi acp
+```
+
+仅在已有 IDE 集成要求旧版引擎时传入 `--engine v1`。协议能力与 IDE 集成说明见 [ACP 参考](docs/zh/reference/kimi-acp.md)。
+
 ## 与上游 kimi-code 的区别
 
 Spec Kimi 主要在四个方面与上游不同：品牌与命令、规格驱动工作流、IDE 集成，以及 Agent 能力。
@@ -100,6 +116,7 @@ api_key = "sk-xxxxxxxxxxxxxxxx"
 - **文档即状态**：打开 `spec.md` 就是当前进度；在任务清单中打勾就是状态变更；没有额外的索引或看板工具。
 - **适度质疑**：Agent 只在需求模糊且高风险时提问，例如自相矛盾、范围不清、隐含技术选型、假设未验证、边界未定义。低风险或明确任务直接执行。
 - **代码质量默认高**：函数必须带注释、避免魔法数字、优先复用成熟方案、保持文件与职责边界清晰。
+- **可验证交付**：规格运行会在 `delivery.md` 中记录工程原则、验证证据和交付结论。
 
 ## 快速开始
 

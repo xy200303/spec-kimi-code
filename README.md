@@ -27,6 +27,22 @@ spec-kimi --version
 
 Do not use upstream `kimi` installers, Homebrew formulas, or the upstream npm package for this distribution.
 
+To install a locally built package from the repository root, use the generated tarball directly:
+
+```sh
+npm install -g "./.tmp/spec-kimi-pack/dev_xiaoyun-spec-kimi-0.24.4.tgz"
+```
+
+## ACP and IDE integration
+
+`spec-kimi acp` is the subprocess entry point for ACP-compatible IDEs. It uses the v2 engine by default, including streaming responses, client-managed file reads and writes, and real-time steering:
+
+```sh
+spec-kimi acp
+```
+
+Pass `--engine v1` only when an existing IDE integration requires the legacy engine. See the [ACP reference](docs/en/reference/kimi-acp.md) for the protocol surface and IDE integration details.
+
 ## Differences from upstream kimi-code
 
 Spec Kimi diverges from upstream in four main areas: branding, the spec-driven workflow, IDE integration, and agent capabilities.
@@ -100,6 +116,7 @@ The tool downloads generated images to the requested path, infers the correct fi
 - **The document is the state**: opening `spec.md` shows the current progress; checking a box in the task checklist updates status. There is no separate index or dashboard.
 - **Question when risky**: the agent asks only when a requirement is ambiguous and high-risk, such as contradictions, unclear scope, implicit technology choices, unverified assumptions, or undefined boundaries. Clear or low-risk work is executed directly.
 - **High code quality by default**: functions are documented, magic numbers are named, mature solutions are preferred, and files keep clear responsibilities and boundaries.
+- **Verifiable delivery**: spec runs record engineering principles, verification evidence, and the delivery conclusion in `delivery.md`.
 
 ## Quick start
 
