@@ -1,5 +1,22 @@
 # @moonshot-ai/kimi-code
 
+## 1.0.0
+
+### Major Changes
+
+- [`d321b62`](https://github.com/MoonshotAI/kimi-code/commit/d321b6235b2c5a0447bfec33e769795dbc8f956c) Thanks [@xy200303](https://github.com/xy200303)! - Use the v2 engine by default for `kimi acp`, including static API-key
+  authentication, ACP client filesystem bridging, real-time steering, and
+  project-local Spec Coding documents. Pass `--engine v1` to use the legacy
+  backend.
+
+- [`6e9e4f1`](https://github.com/MoonshotAI/kimi-code/commit/6e9e4f1f887dd712bb8daa351f63fac47f8b88ea) Thanks [@xy200303](https://github.com/xy200303)! - Replace the legacy multi-file SpecRun/SpecDelivery workflow with a streamlined two-file `spec.md` + `delivery.md` plan mode. Run `EnterPlanMode` to create a spec and `ExitPlanMode` to finalize it.
+
+### Minor Changes
+
+- [`8526623`](https://github.com/MoonshotAI/kimi-code/commit/852662301e308de01a2e20ba26e0ad79c2b9b125) Thanks [@xy200303](https://github.com/xy200303)! - Add the `GenerateImage` built-in tool for generating images via an OpenAI-compatible `/images/generations` endpoint. Configure `[services.image_generation]` in `config.toml` to enable it.
+
+- [`8526623`](https://github.com/MoonshotAI/kimi-code/commit/852662301e308de01a2e20ba26e0ad79c2b9b125) Thanks [@xy200303](https://github.com/xy200303)! - Add adaptive intent clarification to the spec-coding workflow. When a requirement is ambiguous or complex, the agent asks decisive questions and confirms its understanding with a paraphrase before planning. Enable the `spec-coding` experimental flag to try it.
+
 ## 0.25.0
 
 ### Minor Changes
