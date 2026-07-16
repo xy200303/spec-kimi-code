@@ -23,6 +23,7 @@ import type {
   SkillSummary,
   ThinkingEffort,
 } from '@moonshot-ai/kimi-code-sdk';
+import { effectiveModelAlias } from '@moonshot-ai/agent-core';
 
 import type {
   AcpEngine,
@@ -243,9 +244,11 @@ export class V1AcpEngine implements AcpEngine {
     try {
       const config = await this.harness.getConfig();
       const thinking = (config as { thinking?: { enabled?: unknown; effort?: unknown } }).thinking;
-      if (typeof thinking?.enabled === 'boolean') return thinking.enabled;
-      if (typeof thinking?.effort === 'string' && thinking.effort.length > 0) return true;
-      return false;
+      if (thinking?.enabled === false) return false;
+      if (typeof thinking?.effort === 'string' && thinking.effort.length > 0) {
+        return thinking.effort.trim().toLowerCase() !== 'off';
+      }
+      return thinking?.enabled === true;
     } catch {
       return false;
     }
@@ -258,7 +261,14 @@ export class V1AcpEngine implements AcpEngine {
     const config = await this.harness.getConfig();
     const models = config.models;
     if (models === undefined) return {};
-    return models;
+    return Object.fromEntries(
+      Object.entries(models).map(([id, alias]) => {
+        const providerName = alias.provider ?? config.defaultProvider;
+        const anthropicCompatible =
+          providerName !== undefined && config.providers?.[providerName]?.type === 'anthropic';
+        return [id, effectiveModelAlias(alias, anthropicCompatible)];
+      }),
+    );
   }
 
   track(event: string, properties?: Record<string, unknown>): void {
