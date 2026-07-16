@@ -14,13 +14,13 @@ You typically do not need to run `spec-kimi acp` manually — this command is th
 
 ## Engine selection
 
-ACP uses the v1 engine by default. The experimental v2 engine runs the same ACP protocol surface on the DI and Scope backend, including client-managed file reads and writes. Select it explicitly when configuring the ACP subprocess:
+ACP uses the v2 engine by default. It runs the ACP protocol surface on the DI and Scope backend, including client-managed file reads and writes. Use the legacy v1 engine only when an existing integration requires it:
 
 ```sh
-spec-kimi acp --engine v2
+spec-kimi acp --engine v1
 ```
 
-Set `KIMI_ACP_ENGINE=v2` to select v2 without changing the subprocess arguments. When both are present, `--engine` takes precedence. Use `--engine v1` to select the legacy backend explicitly.
+Set `KIMI_ACP_ENGINE=v1` to select v1 without changing the subprocess arguments. When both are present, `--engine` takes precedence. Pass `--engine v2` to select the default backend explicitly.
 
 ## Capability Matrix
 

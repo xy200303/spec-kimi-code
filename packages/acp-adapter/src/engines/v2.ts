@@ -174,6 +174,7 @@ class V2AcpEngineSession implements AcpEngineSession {
   private questionHandler?: (req: QuestionRequest) => Promise<QuestionAnswers | null> | QuestionAnswers | null;
   private knownInteractions = new Set<string>();
   private interactionsUnsub?: () => void;
+  private eventSubscriptionReady?: Promise<void>;
 
   setApprovalHandler(handler: (req: ApprovalRequest) => Promise<ApprovalResponse> | ApprovalResponse): void {
     this.approvalHandler = handler;
@@ -244,12 +245,15 @@ class V2AcpEngineSession implements AcpEngineSession {
       .listen('events', (event) => {
         listener(v2DomainEventToV1(this.id, MAIN_AGENT_ID, event as Event));
       });
+    this.eventSubscriptionReady = sub.ready;
     return () => {
       sub.dispose();
+      if (this.eventSubscriptionReady === sub.ready) this.eventSubscriptionReady = undefined;
     };
   }
 
   async prompt(input: PromptInput): Promise<void> {
+    await this.eventSubscriptionReady;
     await this.agentRpc.prompt({ input: asV2PromptInput(input) });
   }
 
@@ -482,6 +486,10 @@ export class V2AcpEngine implements AcpEngine {
     const session = new V2AcpEngineSession(this, sessionId, hostFileSystem);
     session.setSummary(v2SessionMetaToV1Summary(meta));
     await this.hydrateResumeState(session);
+    const defaultModel = await this.getDefaultModel();
+    if (defaultModel !== '') {
+      await session.setModel(defaultModel);
+    }
     return session;
   }
 
@@ -532,12 +540,12 @@ export class V2AcpEngine implements AcpEngine {
   async getDefaultModel(): Promise<string> {
     const config = await Promise.resolve(this.klient.core(IConfigService).getAll());
     const value = config['defaultModel'];
-    return typeof value === 'string' ? value : '';
+    if (typeof value === 'string' && value.length > 0) return value;
+    return Object.keys(await this.listModels())[0] ?? '';
   }
 
   async getDefaultThinkingSupported(): Promise<boolean> {
-    const config = await Promise.resolve(this.klient.core(IConfigService).getAll());
-    const defaultModel = typeof config['defaultModel'] === 'string' ? config['defaultModel'] : '';
+    const defaultModel = await this.getDefaultModel();
     const models = await this.listModels();
     const alias = models[defaultModel];
     if (alias === undefined) return false;

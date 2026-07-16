@@ -24,6 +24,7 @@ export {
   type WsScopeKind,
   type WsSocketOptions,
   type WsSocketState,
+  type WsReadySubscription,
   type WsSubscription,
 } from './wsSocket.js';
 export { WsChannel, type WsChannelOptions } from './wsChannel.js';

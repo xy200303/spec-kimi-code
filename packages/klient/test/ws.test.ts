@@ -203,7 +203,7 @@ describe('WsKlient', () => {
     const ws = await openKlient(server);
     const seen: unknown[] = [];
     const sub = ws.session('s1').listen('interactions', (data) => seen.push(data));
-    await tick(5);
+    await sub.ready;
     const listenId = [...server.listens][0]!;
     server.pushEvent(listenId, [{ id: 'a1' }]);
     await tick(5);

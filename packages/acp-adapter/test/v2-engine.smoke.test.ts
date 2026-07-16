@@ -5,7 +5,9 @@
  * including ACP session creation with a static API-key provider.
  */
 
+import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -58,6 +60,55 @@ class NoopAcpClient implements Client {
   async readTextFile(_p: ReadTextFileRequest): Promise<ReadTextFileResponse> {
     return { content: '' };
   }
+}
+
+class CollectingAcpClient extends NoopAcpClient {
+  readonly updates: SessionNotification[] = [];
+
+  override async sessionUpdate(notification: SessionNotification): Promise<void> {
+    this.updates.push(notification);
+  }
+}
+
+async function startOpenAiStreamServer(): Promise<{ port: number; close(): Promise<void> }> {
+  const server = createServer((request, response) => {
+    if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+    });
+    response.write(
+      `data: ${JSON.stringify({
+        id: 'chatcmpl-acp-v2',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: 'stub-model',
+        choices: [{ index: 0, delta: { content: 'Hello from v2.' }, finish_reason: null }],
+      })}\n\n`,
+    );
+    response.write(
+      `data: ${JSON.stringify({
+        id: 'chatcmpl-acp-v2',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: 'stub-model',
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })}\n\n`,
+    );
+    response.end('data: [DONE]\n\n');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('mock OpenAI server has no TCP port');
+  return {
+    port: address.port,
+    close: async () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
 }
 
 describe('V2AcpEngine smoke', () => {
@@ -292,6 +343,7 @@ describe('V2AcpEngine smoke', () => {
         '[models.friendly-model]',
         'provider = "example"',
         'model = "provider-model-id"',
+        'max_context_size = 1000',
       ].join('\n'),
     );
     const server = await startServer({ host: '127.0.0.1', port: 0, homeDir: home, logLevel: 'silent' });
@@ -318,4 +370,62 @@ describe('V2AcpEngine smoke', () => {
       await rm(home, { recursive: true, force: true });
     }
   }, 10_000);
+
+  it('streams a v2 assistant reply to the ACP client', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'kap-acp-v2-prompt-'));
+    const provider = await startOpenAiStreamServer();
+    await writeFile(
+      join(home, 'config.toml'),
+      [
+        'default_model = "stub"',
+        '',
+        '[providers.stub]',
+        'type = "openai"',
+        `base_url = "http://127.0.0.1:${String(provider.port)}/v1"`,
+        'api_key = "stub"',
+        '',
+        '[models.stub]',
+        'provider = "stub"',
+        'model = "stub-model"',
+        'max_context_size = 1000',
+      ].join('\n'),
+    );
+    const server = await startServer({ host: '127.0.0.1', port: 0, homeDir: home, logLevel: 'silent' });
+    const engine = new V2AcpEngine({
+      url: `http://127.0.0.1:${server.port}`,
+      token: server.authTokenService.getToken(),
+      embeddedHost: server.embeddedSessionHost,
+    });
+    const { agentStream, clientStream } = makeInMemoryStreamPair();
+    void new AgentSideConnection((connection) => new AcpServer(engine, connection), agentStream);
+    const collecting = new CollectingAcpClient();
+    const client = new ClientSideConnection(() => collecting, clientStream);
+
+    try {
+      await client.initialize({
+        protocolVersion: 1,
+        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      });
+      const session = await client.newSession({ cwd: home, mcpServers: [] });
+      await expect(client.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'hello' }] })).resolves.toMatchObject({
+        stopReason: 'end_turn',
+      });
+      await vi.waitFor(() => {
+        expect(collecting.updates).toContainEqual(
+          expect.objectContaining({
+            sessionId: session.sessionId,
+            update: expect.objectContaining({
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'Hello from v2.' },
+            }),
+          }),
+        );
+      });
+    } finally {
+      await engine.close();
+      await server.close();
+      await provider.close();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

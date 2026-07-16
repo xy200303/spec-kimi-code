@@ -32,6 +32,10 @@ export interface WsSubscription {
   dispose(): void;
 }
 
+export interface WsReadySubscription extends WsSubscription {
+  readonly ready: Promise<void>;
+}
+
 /** Minimal DOM-compatible WebSocket surface this module codes against. */
 export interface WsLike {
   readonly readyState: number;
@@ -73,6 +77,8 @@ interface ActiveListen {
   readonly ids: WsScopeIds;
   readonly handler: (data: unknown) => void;
   readonly onError?: (error: Error) => void;
+  readonly resolveReady: () => void;
+  readonly rejectReady: (error: Error) => void;
   acknowledged: boolean;
 }
 
@@ -191,15 +197,36 @@ export class WsSocket {
     handler: (data: unknown) => void,
     service?: string,
     onError?: (error: Error) => void,
-  ): WsSubscription {
+  ): WsReadySubscription {
     const id = this.nextId();
-    this.listens.set(id, { scope, service, event, ids, handler, onError, acknowledged: false });
+    let resolveReady!: () => void;
+    let rejectReady!: (error: Error) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    void ready.catch(() => undefined);
+    this.listens.set(id, {
+      scope,
+      service,
+      event,
+      ids,
+      handler,
+      onError,
+      resolveReady,
+      rejectReady,
+      acknowledged: false,
+    });
     if (this.state === 'open') {
       this.send({ type: 'listen', id, scope, service, event, ...ids });
     }
     return {
+      ready,
       dispose: () => {
-        if (!this.listens.delete(id)) return;
+        const sub = this.listens.get(id);
+        if (sub === undefined) return;
+        this.listens.delete(id);
+        if (!sub.acknowledged) sub.rejectReady(new Error('listen disposed before acknowledgement'));
         if (this.state === 'open') {
           this.send({ type: 'unlisten', id });
         }
@@ -305,6 +332,7 @@ export class WsSocket {
           if (sub !== undefined) {
             this.listens.delete(frame.id ?? '');
             const error = new RPCError(frame.code ?? 50001, frame.msg ?? 'error');
+            sub.rejectReady(error);
             sub.onError?.(error);
             queueMicrotask(() => {
               for (const listener of this.listenErrorListeners) {
@@ -317,7 +345,10 @@ export class WsSocket {
       }
       case 'listen_result': {
         const sub = this.listens.get(frame.id ?? '');
-        if (sub !== undefined) sub.acknowledged = true;
+        if (sub !== undefined) {
+          sub.acknowledged = true;
+          sub.resolveReady();
+        }
         return;
       }
       case 'event': {

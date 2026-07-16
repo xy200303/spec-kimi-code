@@ -13,9 +13,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@moonshot-ai/acp-adapter', () => ({
   ACP_BUILTIN_SLASH_COMMANDS: [],
   runAcpServer: vi.fn(async () => undefined),
+  V1AcpEngine: class {},
+  V2AcpEngine: class {
+    async close(): Promise<void> {}
+  },
 }));
 
-import { runAcpServer } from '@moonshot-ai/acp-adapter';
+vi.mock('@moonshot-ai/kap-server', () => ({
+  startServer: vi.fn(async () => ({
+    port: 58627,
+    authTokenService: { getToken: () => 'test-token' },
+    embeddedSessionHost: {},
+    close: vi.fn(async () => {}),
+  })),
+}));
+
+import { runAcpServer, V2AcpEngine } from '@moonshot-ai/acp-adapter';
+import { startServer } from '@moonshot-ai/kap-server';
 
 import { registerAcpCommand } from '#/cli/sub/acp';
 
@@ -31,6 +45,7 @@ describe('kimi acp', () => {
 
   beforeEach(() => {
     vi.mocked(runAcpServer).mockClear();
+    vi.mocked(startServer).mockClear();
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number | string | null) => {
       throw new ExitCalled(code);
     }) as never);
@@ -51,15 +66,23 @@ describe('kimi acp', () => {
     expect(acp?.description()).toMatch(/Agent Client Protocol/);
   });
 
-  it('invokes runAcpServer with a constructed harness and exits 0 on success', async () => {
+  it('uses the v2 engine by default and exits 0 on success', async () => {
+    const previousEngine = process.env['KIMI_ACP_ENGINE'];
+    delete process.env['KIMI_ACP_ENGINE'];
     const program = new Command('kimi').exitOverride();
     registerAcpCommand(program);
 
-    await expect(program.parseAsync(['node', 'kimi', 'acp'])).rejects.toThrow(ExitCalled);
+    try {
+      await expect(program.parseAsync(['node', 'kimi', 'acp'])).rejects.toThrow(ExitCalled);
+    } finally {
+      if (previousEngine !== undefined) {
+        process.env['KIMI_ACP_ENGINE'] = previousEngine;
+      }
+    }
 
     expect(runAcpServer).toHaveBeenCalledTimes(1);
-    const harnessArg = vi.mocked(runAcpServer).mock.calls[0]?.[0];
-    expect(harnessArg).toBeDefined();
+    expect(startServer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runAcpServer).mock.calls[0]?.[0]).toBeInstanceOf(V2AcpEngine);
     const optsArg = vi.mocked(runAcpServer).mock.calls[0]?.[1];
     expect(optsArg).toEqual(
       expect.objectContaining({

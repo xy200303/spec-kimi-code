@@ -17,8 +17,8 @@
  *    the agent binary with the advertised `args:['--login']` appended.
  *  - On stream close or unhandled error the process exits with the
  *    appropriate code.
- *  - `--engine v2` starts an in-process `kap-server` and bridges the ACP
- *    adapter to the v2 DI × Scope engine over `/api/v2`.
+ *  - v2 is the default engine; `--engine v1` explicitly selects the legacy
+ *    SDK backend.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -73,14 +73,14 @@ export function registerAcpCommand(parent: Command): void {
     )
     .option(
       '--engine <engine>',
-      'Backend engine to use: v1 (legacy SDK, default) or v2 (kap-server /api/v2).',
+      'Backend engine to use: v2 (kap-server /api/v2, default) or v1 (legacy SDK).',
     )
     .action(async (opts: { login?: boolean; engine?: string }) => {
       if (opts.login === true) {
         await runLoginFlow();
         return;
       }
-      const engineName = opts.engine ?? process.env['KIMI_ACP_ENGINE'] ?? 'v1';
+      const engineName = opts.engine ?? process.env['KIMI_ACP_ENGINE'] ?? 'v2';
       const engine = await buildEngine(engineName);
       // Forward `KIMI_CODE_HOME` (if set) into `authMethods[0].env` so the
       // `kimi login` subprocess clients spawn for terminal-auth writes its

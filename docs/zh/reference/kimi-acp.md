@@ -14,13 +14,13 @@ spec-kimi acp
 
 ## 引擎选择
 
-ACP 默认使用 v1 引擎。实验性的 v2 引擎在 DI × Scope 后端上提供相同的 ACP 协议面，并支持由客户端管理文件读取和写入。配置 ACP 子进程时，显式选择 v2：
+ACP 默认使用 v2 引擎。它在 DI × Scope 后端上提供 ACP 协议面，并支持由客户端管理文件读取和写入。仅当已有集成需要时，才使用旧版 v1 引擎：
 
 ```sh
-spec-kimi acp --engine v2
+spec-kimi acp --engine v1
 ```
 
-也可以设置 `KIMI_ACP_ENGINE=v2`，无需修改子进程参数即可选择 v2。两者同时存在时，`--engine` 优先。使用 `--engine v1` 可显式选择旧版后端。
+也可以设置 `KIMI_ACP_ENGINE=v1`，无需修改子进程参数即可选择 v1。两者同时存在时，`--engine` 优先。传入 `--engine v2` 可显式选择默认后端。
 
 ## 能力矩阵
 

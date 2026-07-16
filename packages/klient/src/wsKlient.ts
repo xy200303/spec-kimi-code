@@ -24,6 +24,7 @@ import {
   WsSocket,
   type WsSocketOptions,
   type WsSocketState,
+  type WsReadySubscription,
   type WsSubscription,
 } from './wsSocket.js';
 
@@ -47,7 +48,7 @@ export class WsKlient {
   }
 
   /** Subscribe to a core-scoped event stream (e.g. `events`). */
-  listen(event: string, handler: (data: unknown) => void): WsSubscription {
+  listen(event: string, handler: (data: unknown) => void): WsReadySubscription {
     return this.socket.listen('core', event, {}, handler);
   }
 
@@ -87,7 +88,7 @@ export class WsSessionClient {
   }
 
   /** Subscribe to a session-scoped event stream (e.g. `interactions`). */
-  listen(event: string, handler: (data: unknown) => void): WsSubscription {
+  listen(event: string, handler: (data: unknown) => void): WsReadySubscription {
     return this.socket.listen('session', event, { sessionId: this.sessionId }, handler);
   }
 
@@ -118,7 +119,7 @@ export class WsAgentClient {
   }
 
   /** Subscribe to an agent-scoped event stream (e.g. `events`). */
-  listen(event: string, handler: (data: unknown) => void): WsSubscription {
+  listen(event: string, handler: (data: unknown) => void): WsReadySubscription {
     return this.socket.listen(
       'agent',
       event,

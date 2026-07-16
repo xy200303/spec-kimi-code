@@ -278,7 +278,11 @@ describe('Plan service', () => {
         deliveryPath: join(root, 'delivery.md'),
       });
       expect(files.get(join(root, 'spec.md'))).toContain('## 用户原始描述');
+      expect(files.get(join(root, 'spec.md'))).toContain('## 变更记录');
       expect(files.get(join(root, 'delivery.md'))).toContain('# 交付记录');
+      expect(files.get(join(root, 'delivery.md'))).toContain('### 测试策略声明');
+      expect(files.get(join(root, 'delivery.md'))).toContain('| KISS |');
+      expect(files.get(join(root, 'delivery.md'))).toContain('| 执行命令与结果 |');
       expect(writeText).toHaveBeenCalledTimes(2);
     });
 

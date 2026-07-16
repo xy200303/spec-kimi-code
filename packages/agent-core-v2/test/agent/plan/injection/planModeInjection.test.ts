@@ -169,6 +169,22 @@ describe('PlanModeService dynamic injection content', () => {
       text: expect.stringContaining('Adaptive intent clarification'),
     });
   });
+
+  it('injects engineering-quality controls when spec coding is enabled', async () => {
+    specCodingEnabled = true;
+
+    await injectDynamic(injector);
+
+    const text = specWorkflowMessages(context)[0]?.content[0];
+    expect(text).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Quality control before completion'),
+    });
+    expect(text).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Document intent, not narration'),
+    });
+  });
 });
 
 describe('PlanModeService dynamic injection cadence', () => {
