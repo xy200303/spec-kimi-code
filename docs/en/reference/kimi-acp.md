@@ -64,7 +64,7 @@ The spec divides methods into a **stable** surface and an evolving **unstable** 
 | Method | Implemented | Description |
 | --- | --- | --- |
 | `session/update` | Yes | Streams `agent_message_chunk` / `tool_call*` / `plan` / `config_option_update` / `available_commands_update` |
-| `session/request_permission` | Yes | Shared channel for tool approval and question elicitation |
+| `session/request_permission` | Yes | Shared channel for tool approval and question elicitation; multi-question prompts are presented in sequence, and multi-select choices are confirmed one option at a time |
 | `fs/read_text_file` | Yes | File reads at the kaos layer are routed to the client (advertised via `fsCapabilities`) |
 | `fs/write_text_file` | Yes | File writes at the kaos layer are routed to the client |
 | `terminal/create` · `output` · `release` · `kill` · `wait_for_exit` | No | Terminal reverse-RPC not connected; shell commands use local execution |

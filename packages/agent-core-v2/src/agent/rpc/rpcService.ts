@@ -314,8 +314,10 @@ export class AgentRPCService implements IAgentRPCService {
     return this.goal.getGoal();
   }
 
-  pauseGoal(_payload: EmptyPayload) {
-    return this.goal.pauseGoal();
+  async pauseGoal(_payload: EmptyPayload) {
+    const snapshot = await this.goal.pauseGoal();
+    this.cancel({});
+    return snapshot;
   }
 
   resumeGoal(_payload: EmptyPayload) {

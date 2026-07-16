@@ -5,7 +5,12 @@ import type {
 import type { QuestionItem } from '@moonshot-ai/kimi-code-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { outcomeToQuestionAnswer, questionItemToPermissionOptions } from '../src/question';
+import {
+  outcomeToMultiSelectDecision,
+  outcomeToQuestionAnswer,
+  multiSelectOptionToPermissionOptions,
+  questionItemToPermissionOptions,
+} from '../src/question';
 
 const sampleQuestion: QuestionItem = {
   question: 'Pick a flavour',
@@ -15,6 +20,10 @@ const sampleQuestion: QuestionItem = {
     { label: 'Mint chip' },
   ],
 };
+
+function selected(optionId: string): RequestPermissionResponse {
+  return { outcome: { outcome: 'selected', optionId } };
+}
 
 describe('questionItemToPermissionOptions', () => {
   it('maps each option to allow_once + a trailing Skip reject_once', () => {
@@ -65,37 +74,53 @@ describe('questionItemToPermissionOptions', () => {
 });
 
 describe('outcomeToQuestionAnswer', () => {
-  function selected(optionId: string): RequestPermissionResponse {
-    return { outcome: { outcome: 'selected', optionId } };
-  }
-
   it('maps a selected q0_opt_<i> to { question: options[i].label }', () => {
-    expect(outcomeToQuestionAnswer(sampleQuestion, selected('q0_opt_2'))).toEqual({
+    expect(outcomeToQuestionAnswer(sampleQuestion, 0, selected('q0_opt_2'))).toEqual({
       'Pick a flavour': 'Mint chip',
     });
-    expect(outcomeToQuestionAnswer(sampleQuestion, selected('q0_opt_0'))).toEqual({
+    expect(outcomeToQuestionAnswer(sampleQuestion, 0, selected('q0_opt_0'))).toEqual({
       'Pick a flavour': 'Vanilla',
     });
   });
 
   it('maps q0_skip to null', () => {
-    expect(outcomeToQuestionAnswer(sampleQuestion, selected('q0_skip'))).toBeNull();
+    expect(outcomeToQuestionAnswer(sampleQuestion, 0, selected('q0_skip'))).toBeNull();
   });
 
   it('maps cancelled to null', () => {
     expect(
-      outcomeToQuestionAnswer(sampleQuestion, { outcome: { outcome: 'cancelled' } }),
+      outcomeToQuestionAnswer(sampleQuestion, 0, { outcome: { outcome: 'cancelled' } }),
     ).toBeNull();
   });
 
   it('maps an unknown optionId to null', () => {
-    expect(outcomeToQuestionAnswer(sampleQuestion, selected('wat'))).toBeNull();
+    expect(outcomeToQuestionAnswer(sampleQuestion, 0, selected('wat'))).toBeNull();
     expect(
-      outcomeToQuestionAnswer(sampleQuestion, selected('approve_once')),
+      outcomeToQuestionAnswer(sampleQuestion, 0, selected('approve_once')),
     ).toBeNull();
   });
 
   it('defensively maps an out-of-bounds index to null', () => {
-    expect(outcomeToQuestionAnswer(sampleQuestion, selected('q0_opt_99'))).toBeNull();
+    expect(outcomeToQuestionAnswer(sampleQuestion, 0, selected('q0_opt_99'))).toBeNull();
+  });
+});
+
+describe('multiSelectOptionToPermissionOptions', () => {
+  it('creates distinct select and skip options for one sequential multi-select item', () => {
+    expect(multiSelectOptionToPermissionOptions(2, 3, 'TypeScript')).toEqual([
+      { optionId: 'q2_multi_3_select', name: 'Select TypeScript', kind: 'allow_once' },
+      { optionId: 'q2_multi_3_skip', name: 'Do not select TypeScript', kind: 'reject_once' },
+    ]);
+  });
+});
+
+describe('outcomeToMultiSelectDecision', () => {
+  it('maps the selected and unselected outcomes for one option', () => {
+    expect(outcomeToMultiSelectDecision(2, 3, selected('q2_multi_3_select'))).toBe(true);
+    expect(outcomeToMultiSelectDecision(2, 3, selected('q2_multi_3_skip'))).toBe(false);
+  });
+
+  it('returns null when the multi-select interaction is cancelled', () => {
+    expect(outcomeToMultiSelectDecision(2, 3, { outcome: { outcome: 'cancelled' } })).toBeNull();
   });
 });

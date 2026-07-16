@@ -1,5 +1,11 @@
 # @moonshot-ai/kimi-code
 
+## 1.0.1
+
+### Patch Changes
+
+- Fix queued prompts remaining blocked after a goal is paused, and preserve complete multi-question and multi-select answers in ACP clients.
+
 ## 1.0.0
 
 ### Major Changes

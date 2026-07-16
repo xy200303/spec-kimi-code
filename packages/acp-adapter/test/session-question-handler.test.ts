@@ -1,5 +1,5 @@
 /**
- * Tests for {@link AcpSession.handleQuestion} — the Phase 13.1 bridge
+ * Tests for {@link AcpSession.handleQuestion} — the sequential bridge
  * from the SDK's AskUserQuestion reverse-RPC to the ACP
  * `session/request_permission` surface.
  *
@@ -66,6 +66,7 @@ class CapturingConn {
   reply: RequestPermissionResponse = {
     outcome: { outcome: 'selected', optionId: 'q0_opt_0' },
   };
+  replies: RequestPermissionResponse[] = [];
   shouldThrow = false;
 
   async requestPermission(p: RequestPermissionRequest): Promise<RequestPermissionResponse> {
@@ -73,7 +74,7 @@ class CapturingConn {
     if (this.shouldThrow) {
       throw new Error('client unreachable');
     }
-    return this.reply;
+    return this.replies.shift() ?? this.reply;
   }
   async sessionUpdate(): Promise<void> {
     /* not exercised */
@@ -158,8 +159,7 @@ describe('AcpSession.handleQuestion', () => {
       'reject_once',
     ]);
     expect(req.toolCall.title).toBe('AskUserQuestion');
-    // currentTurnId is undefined in this test path, so raw toolCallId is used.
-    expect(req.toolCall.toolCallId).toBe('tc-ask-1');
+    expect(req.toolCall.toolCallId).toBe('tc-ask-1:question:0');
     expect(req.toolCall.content).toEqual([
       { type: 'content', content: { type: 'text', text: '哪个口味？' } },
     ]);
@@ -190,10 +190,14 @@ describe('AcpSession.handleQuestion', () => {
     expect(trackCalls).toEqual([{ event: 'question_dismissed', properties: undefined }]);
   });
 
-  it('multi-question degradation: 3 questions → only first asked + question_degraded', async () => {
+  it('asks each question in order and returns the merged answers', async () => {
     const { conn, raw } = makeConn();
     const handle = makeQuestionSession('s-q-multi');
-    raw.reply = { outcome: { outcome: 'selected', optionId: 'q0_opt_1' } };
+    raw.replies = [
+      { outcome: { outcome: 'selected', optionId: 'q0_opt_1' } },
+      { outcome: { outcome: 'selected', optionId: 'q1_opt_0' } },
+      { outcome: { outcome: 'selected', optionId: 'q2_opt_0' } },
+    ];
     new AcpSession(conn, handle.session, undefined, track);
 
     const extra1: QuestionItem = { question: 'Q2', options: [{ label: 'a' }] };
@@ -202,24 +206,22 @@ describe('AcpSession.handleQuestion', () => {
       makeReq({ questions: [sampleQuestion, extra1, extra2] }),
     );
 
-    expect(answer).toEqual({ '哪个口味？': '巧克力' });
-    expect(raw.permissionRequests).toHaveLength(1);
-    // Telemetry: degraded(multi_question) first, then answered.
-    expect(trackCalls).toEqual([
-      { event: 'question_degraded', properties: { reason: 'multi_question', dropped: 2 } },
-      { event: 'question_answered', properties: { answered: 1 } },
+    expect(answer).toEqual({ '哪个口味？': '巧克力', Q2: 'a', Q3: 'b' });
+    expect(raw.permissionRequests.map((request) => request.options.map((option) => option.optionId))).toEqual([
+      ['q0_opt_0', 'q0_opt_1', 'q0_opt_2', 'q0_skip'],
+      ['q1_opt_0', 'q1_skip'],
+      ['q2_opt_0', 'q2_skip'],
     ]);
-    // log.warn fired with the dropped count.
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('degrading to first question only'),
-      expect.objectContaining({ dropped: 2 }),
-    );
+    expect(trackCalls).toEqual([{ event: 'question_answered', properties: { answered: 3 } }]);
   });
 
-  it('multiSelect degradation: still asks the question + question_degraded', async () => {
+  it('asks every multi-select option and joins the selected labels', async () => {
     const { conn, raw } = makeConn();
     const handle = makeQuestionSession('s-q-multisel');
-    raw.reply = { outcome: { outcome: 'selected', optionId: 'q0_opt_0' } };
+    raw.replies = [
+      { outcome: { outcome: 'selected', optionId: 'q0_multi_0_select' } },
+      { outcome: { outcome: 'selected', optionId: 'q0_multi_1_skip' } },
+    ];
     new AcpSession(conn, handle.session, undefined, track);
 
     const multi: QuestionItem = {
@@ -233,11 +235,29 @@ describe('AcpSession.handleQuestion', () => {
     });
 
     expect(answer).toEqual({ 'Pick any': 'a' });
-    expect(raw.permissionRequests).toHaveLength(1);
-    expect(trackCalls).toEqual([
-      { event: 'question_degraded', properties: { reason: 'multi_select' } },
-      { event: 'question_answered', properties: { answered: 1 } },
+    expect(raw.permissionRequests.map((request) => request.options.map((option) => option.optionId))).toEqual([
+      ['q0_multi_0_select', 'q0_multi_0_skip'],
+      ['q0_multi_1_select', 'q0_multi_1_skip'],
     ]);
+    expect(trackCalls).toEqual([{ event: 'question_answered', properties: { answered: 1 } }]);
+  });
+
+  it('stops the sequence when a later question is dismissed', async () => {
+    const { conn, raw } = makeConn();
+    const handle = makeQuestionSession('s-q-later-dismissal');
+    raw.replies = [
+      { outcome: { outcome: 'selected', optionId: 'q0_opt_0' } },
+      { outcome: { outcome: 'selected', optionId: 'q1_skip' } },
+    ];
+    new AcpSession(conn, handle.session, undefined, track);
+
+    const answer = await handle.invokeHandler(
+      makeReq({ questions: [sampleQuestion, { question: 'Q2', options: [{ label: 'a' }] }] }),
+    );
+
+    expect(answer).toBeNull();
+    expect(raw.permissionRequests).toHaveLength(2);
+    expect(trackCalls).toEqual([{ event: 'question_dismissed', properties: undefined }]);
   });
 
   it('requestPermission throw → log.warn + null', async () => {

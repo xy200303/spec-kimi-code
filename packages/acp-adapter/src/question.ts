@@ -39,10 +39,8 @@ function skipOptionId(questionIndex: number): string {
  *    emits `question_dismissed` and resolves with a null result); the
  *    Skip surface is the user-facing path into that branch.
  *
- * `questionIndex` is currently always `0` (Phase 13.1 degrades
- * multi-question to single-question), but the namespace is wired in so
- * future multi-question support is a pure handler change with no wire
- * format break.
+ * `questionIndex` keeps every sequentially presented question in a single
+ * request distinct.
  *
  * Returned `readonly` because callers treat it as a constant lookup
  * table — they do not mutate it.
@@ -64,6 +62,32 @@ export function questionItemToPermissionOptions(
   return options;
 }
 
+const multiSelectOptionId = (questionIndex: number, optionIndex: number, selected: boolean): string =>
+  `q${questionIndex}_multi_${optionIndex}_${selected ? 'select' : 'skip'}`;
+
+/**
+ * Build the two-way confirmation used to render one multi-select option over
+ * ACP's single-choice permission UI.
+ */
+export function multiSelectOptionToPermissionOptions(
+  questionIndex: number,
+  optionIndex: number,
+  optionLabel: string,
+): readonly PermissionOption[] {
+  return [
+    {
+      optionId: multiSelectOptionId(questionIndex, optionIndex, true),
+      name: `Select ${optionLabel}`,
+      kind: 'allow_once' as const,
+    },
+    {
+      optionId: multiSelectOptionId(questionIndex, optionIndex, false),
+      name: `Do not select ${optionLabel}`,
+      kind: 'reject_once' as const,
+    },
+  ];
+}
+
 /**
  * Reverse-map an ACP {@link RequestPermissionResponse} into a tool-side
  * {@link QuestionAnswers} payload, returning `null` when the user
@@ -80,20 +104,33 @@ export function questionItemToPermissionOptions(
  */
 export function outcomeToQuestionAnswer(
   question: QuestionItem,
+  questionIndex: number,
   response: RequestPermissionResponse,
 ): QuestionAnswers | null {
   if (response.outcome.outcome === 'cancelled') return null;
   const optionId = response.outcome.optionId;
   // Skip — explicit dismissal path; treat the same as `cancelled`.
-  if (optionId === skipOptionId(0)) return null;
+  if (optionId === skipOptionId(questionIndex)) return null;
   // Selected option — parse the `q0_opt_<i>` shape and look up the
   // matching label. Reject anything that does not match the namespace
   // (or whose index is out of bounds) defensively rather than crashing.
-  const match = /^q0_opt_(\d+)$/.exec(optionId);
+  const match = new RegExp(`^q${String(questionIndex)}_opt_(\\d+)$`).exec(optionId);
   if (!match) return null;
   const optionIndex = Number(match[1]);
   if (!Number.isInteger(optionIndex) || optionIndex < 0) return null;
   const selected = question.options[optionIndex];
   if (!selected) return null;
   return { [question.question]: selected.label };
+}
+
+/** Return whether a sequential multi-select option was selected, or `null` when dismissed. */
+export function outcomeToMultiSelectDecision(
+  questionIndex: number,
+  optionIndex: number,
+  response: RequestPermissionResponse,
+): boolean | null {
+  if (response.outcome.outcome === 'cancelled') return null;
+  if (response.outcome.optionId === multiSelectOptionId(questionIndex, optionIndex, true)) return true;
+  if (response.outcome.optionId === multiSelectOptionId(questionIndex, optionIndex, false)) return false;
+  return null;
 }

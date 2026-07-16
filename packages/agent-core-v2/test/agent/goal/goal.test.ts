@@ -1809,6 +1809,33 @@ describe('AgentGoalService hard wall-clock deadline', () => {
       await ctx.dispose();
     }
   });
+
+  it('cancels the active turn when a user pauses a goal so the next prompt can start', async () => {
+    const llm = blockingGenerate();
+    let generateCalls = 0;
+    const ctx = createTestAgent({
+      generate: async (...args) => {
+        generateCalls += 1;
+        return llm.generate(...args);
+      },
+    });
+    try {
+      ctx.configure();
+      await ctx.rpc.createGoal({ objective: 'pause safely' });
+      await ctx.rpc.prompt({ input: [{ type: 'text', text: 'start work' }] });
+      await llm.started;
+
+      await ctx.rpc.pauseGoal({});
+      expect(llm.signal().aborted).toBe(true);
+      await ctx.untilTurnEnd();
+      expect((await ctx.rpc.getGoal({})).goal?.status).toBe('paused');
+
+      await ctx.rpc.prompt({ input: [{ type: 'text', text: 'new request' }] });
+      await vi.waitFor(() => expect(generateCalls).toBe(2));
+    } finally {
+      await ctx.dispose();
+    }
+  });
 });
 
 describe('AgentGoalService mid-turn budget stop', () => {

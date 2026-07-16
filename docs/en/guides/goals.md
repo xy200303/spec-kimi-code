@@ -91,7 +91,7 @@ Use the same command surface to inspect or control the current goal:
 | Command | Action |
 | --- | --- |
 | `/goal` or `/goal status` | Show the current goal and its progress |
-| `/goal pause` | Pause the active goal without deleting it |
+| `/goal pause` | Pause the active goal, stop its current turn, and keep it for later |
 | `/goal resume` | Resume a paused or blocked goal |
 | `/goal cancel` | Remove the current goal |
 | `/goal replace <objective>` | Replace the current goal with a new objective |

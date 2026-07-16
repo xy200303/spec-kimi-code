@@ -67,7 +67,7 @@ Some commands are only available in the idle state. Executing these commands whi
 | Command | Action | Availability |
 | --- | --- | --- |
 | `/goal` or `/goal status` | Display the current goal along with its status, elapsed time, turn count, and token count | Always available |
-| `/goal pause` | Pause an active goal and keep it | Always available |
+| `/goal pause` | Pause an active goal, stop its current turn, and keep it | Always available |
 | `/goal resume` | Resume a paused or blocked goal | Idle only |
 | `/goal cancel` | Remove the current goal | Always available |
 | `/goal replace <objective>` | Replace the saved goal with a new objective | Idle only |

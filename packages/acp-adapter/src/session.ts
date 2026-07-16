@@ -57,7 +57,12 @@ import {
   turnEndReasonToStopReason,
 } from './events-map';
 import { acpModeToToggles, DEFAULT_MODE_ID, isAcpModeId, type AcpModeId } from './modes';
-import { outcomeToQuestionAnswer, questionItemToPermissionOptions } from './question';
+import {
+  outcomeToMultiSelectDecision,
+  outcomeToQuestionAnswer,
+  multiSelectOptionToPermissionOptions,
+  questionItemToPermissionOptions,
+} from './question';
 import { detectSlashIntent } from './slash';
 
 /**
@@ -1391,14 +1396,10 @@ export class AcpSession {
    * the adapter re-uses `requestPermission` and tags the options with a
    * `q{n}_*` namespace so the round-trip is unambiguous.
    *
-   * Degradation rules:
-   *  - `req.questions.length > 1` → only the first question is asked;
-   *    telemetry records the dropped count so we can observe how often
-   *    multi-question prompts land in the wild.
-   *  - `q.multiSelect === true` → still asked as single-select; the
-   *    SDK's ask-user tool tolerates a single-key answer for a multi-
-   *    select prompt so this is a graceful narrow rather than a hard
-   *    fail.
+   * ACP's permission UI is single-choice, so questions are presented in
+   * sequence. Multi-select options become individual select/not-select
+   * confirmations; selected labels are joined with `, ` to match the SDK
+   * question-answer contract.
    *
    * Error policy mirrors {@link handleApproval}: any RPC failure logs
    * a warning and returns `null` so the SDK resolves the tool with the
@@ -1415,46 +1416,21 @@ export class AcpSession {
       });
       return null;
     }
-    if (questions.length > 1) {
-      log.warn('acp: handleQuestion degrading to first question only', {
-        sessionId: this.id,
-        dropped: questions.length - 1,
-      });
-      this.emitTelemetry('question_degraded', {
-        reason: 'multi_question',
-        dropped: questions.length - 1,
-      });
-    }
-    const q = questions[0]!;
-    if (q.multiSelect === true) {
-      this.emitTelemetry('question_degraded', { reason: 'multi_select' });
-    }
-    const options = questionItemToPermissionOptions(q, 0);
     const rawToolCallId = req.toolCallId ?? 'ask-user';
-    const toolCallId =
-      this.currentTurnId !== undefined
-        ? acpToolCallId(this.currentTurnId, rawToolCallId)
-        : rawToolCallId;
     try {
-      const response = await this.conn.requestPermission({
-        sessionId: this.id,
-        options: [...options],
-        toolCall: {
-          toolCallId,
-          title: 'AskUserQuestion',
-          content: [{ type: 'content', content: { type: 'text', text: q.question } }],
-        },
-      });
-      const answer = outcomeToQuestionAnswer(q, response);
-      if (answer === null) {
-        // Dismissed via skip / cancel / unknown optionId — telemetry
-        // matches the ask-user tool's existing `question_dismissed`
-        // event so dashboards stay coherent.
-        this.emitTelemetry('question_dismissed');
-      } else {
-        this.emitTelemetry('question_answered', { answered: Object.keys(answer).length });
+      const answers: QuestionAnswers = {};
+      for (const [questionIndex, question] of questions.entries()) {
+        const answer = question.multiSelect === true
+          ? await this.askMultiSelectQuestion(question, questionIndex, rawToolCallId)
+          : await this.askQuestion(question, questionIndex, rawToolCallId);
+        if (answer === null) {
+          this.emitTelemetry('question_dismissed');
+          return null;
+        }
+        Object.assign(answers, answer);
       }
-      return answer;
+      this.emitTelemetry('question_answered', { answered: Object.keys(answers).length });
+      return answers;
     } catch (err) {
       log.warn('acp: requestPermission (question) failed; dismissing', {
         sessionId: this.id,
@@ -1463,6 +1439,61 @@ export class AcpSession {
       });
       return null;
     }
+  }
+
+  private async askQuestion(
+    question: QuestionRequest['questions'][number],
+    questionIndex: number,
+    rawToolCallId: string,
+  ): Promise<QuestionAnswers | null> {
+    const response = await this.conn.requestPermission({
+      sessionId: this.id,
+      options: [...questionItemToPermissionOptions(question, questionIndex)],
+      toolCall: this.questionToolCall(question.question, rawToolCallId, questionIndex),
+    });
+    return outcomeToQuestionAnswer(question, questionIndex, response);
+  }
+
+  private async askMultiSelectQuestion(
+    question: QuestionRequest['questions'][number],
+    questionIndex: number,
+    rawToolCallId: string,
+  ): Promise<QuestionAnswers | null> {
+    const selected: string[] = [];
+    for (const [optionIndex, option] of question.options.entries()) {
+      const response = await this.conn.requestPermission({
+        sessionId: this.id,
+        options: [...multiSelectOptionToPermissionOptions(questionIndex, optionIndex, option.label)],
+        toolCall: this.questionToolCall(
+          `${question.question}\n\nSelect option: ${option.label}`,
+          rawToolCallId,
+          questionIndex,
+          optionIndex,
+        ),
+      });
+      const include = outcomeToMultiSelectDecision(questionIndex, optionIndex, response);
+      if (include === null) return null;
+      if (include) selected.push(option.label);
+    }
+    return { [question.question]: selected.join(', ') };
+  }
+
+  private questionToolCall(
+    question: string,
+    rawToolCallId: string,
+    questionIndex: number,
+    optionIndex?: number,
+  ): { toolCallId: string; title: string; content: { type: 'content'; content: { type: 'text'; text: string } }[] } {
+    const suffix = optionIndex === undefined
+      ? `question:${String(questionIndex)}`
+      : `question:${String(questionIndex)}:option:${String(optionIndex)}`;
+    const localToolCallId = `${rawToolCallId}:${suffix}`;
+    return {
+      toolCallId:
+        this.currentTurnId !== undefined ? acpToolCallId(this.currentTurnId, localToolCallId) : localToolCallId,
+      title: 'AskUserQuestion',
+      content: [{ type: 'content', content: { type: 'text', text: question } }],
+    };
   }
 
   /**
