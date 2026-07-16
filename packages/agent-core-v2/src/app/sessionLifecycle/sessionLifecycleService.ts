@@ -39,7 +39,6 @@ import {
 import { unwrapErrorCause } from '#/_base/errors/errors';
 import { Emitter, type Event } from '#/_base/event';
 import { encodeWorkDirKey } from '#/_base/utils/workdir-slug';
-import { ISessionActivityKernel } from '#/activity/activity';
 import { DEFAULT_PLAN_MODE_SECTION } from '#/agent/plan/configSection';
 import { IAgentPlanService } from '#/agent/plan/plan';
 import { IBootstrapService } from '#/app/bootstrap/bootstrap';
@@ -187,7 +186,6 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
         extra: sessionSeeds,
       },
     ) as ISessionScopeHandle;
-    handle.accessor.get(ISessionActivityKernel);
     if (additionalDirs.length > 0) {
       handle.accessor.get(ISessionWorkspaceContext).setAdditionalDirs(additionalDirs);
     }
@@ -218,7 +216,6 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     this._onDidCreateSession.fire(event);
     this.telemetry.setContext({ sessionId: event.sessionId });
     this.telemetry.track2('session_started', { resumed: event.source === 'resume' });
-    event.handle.accessor.get(ISessionActivityKernel).markActive();
   }
 
   get(sessionId: string): ISessionScopeHandle | undefined {
@@ -289,7 +286,6 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     if (handle === undefined) return;
     await this.announceWillClose({ sessionId, handle, reason: 'exit' });
     this.sessions.delete(sessionId);
-    handle.accessor.get(ISessionActivityKernel).beginClosing();
     await this.drainAgents(handle);
     handle.dispose();
     this._onDidCloseSession.fire({ sessionId });
@@ -300,7 +296,6 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
     if (handle === undefined) return;
     const meta = handle.accessor.get(ISessionMetadata);
     await meta.setArchived(true);
-    handle.accessor.get(ISessionActivityKernel).beginClosing();
     await this.drainAgents(handle);
     this.event.publish({
       type: 'event.session.archived',
@@ -343,17 +338,20 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
         ? sourceHandle.accessor.get(ISessionContext).workspaceId
         : indexSummary!.workspaceId;
 
-    const quiesce =
-      sourceHandle !== undefined
-        ? await sourceHandle.accessor.get(ISessionActivityKernel).quiesce('fork')
-        : undefined;
+    // Fork is unconditional — it never rejects on the source being busy.
+    // Copying a live journal yields a torn prefix (a turn cut mid-flight),
+    // which is exactly the state a crash leaves behind, and replay already
+    // normalizes that on every restore. The source keeps running untouched;
+    // the fork simply continues from the copy point. No admission gate, no
+    // quiesce: the only requirement is a durable copy point, which
+    // `copyAgentWire`'s flush provides.
     let targetId: string | undefined;
     let target: ISessionScopeHandle | undefined;
     let targetSessionDir: string | undefined;
     try {
       const workspace = await this.workspaceRegistry.get(workspaceId);
       if (workspace === undefined) {
-        throw new Error2('workspace.not_found', `workspace ${workspaceId} does not exist`);
+        throw new Error2(ErrorCodes.WORKSPACE_NOT_FOUND, `workspace ${workspaceId} does not exist`);
       }
 
       const sourceMeta =
@@ -438,8 +436,6 @@ export class SessionLifecycleService extends Disposable implements ISessionLifec
         await this.hostFs.remove(targetSessionDir).catch(() => {});
       }
       throw error;
-    } finally {
-      quiesce?.dispose();
     }
   }
 

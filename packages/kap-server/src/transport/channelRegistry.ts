@@ -15,6 +15,7 @@
 import {
   Disposable,
   getScopedServiceDescriptors,
+  IAgentActivityView,
   IAgentContextMemoryService,
   IAgentContextSizeService,
   IAgentGoalService,
@@ -39,7 +40,6 @@ import {
   IOAuthService,
   IPluginService,
   IProviderService,
-  ISessionActivity,
   ISessionApprovalService,
   ISessionFsService,
   ISessionIndex,
@@ -214,7 +214,6 @@ const EXPOSED_SERVICES: readonly ServiceIdentifier<unknown>[] = [
   IBootstrapService,
   // session
   ISessionMetadata,
-  ISessionActivity,
   ISessionLifecycleService,
   ISessionInitService,
   ISessionApprovalService,
@@ -230,6 +229,7 @@ const EXPOSED_SERVICES: readonly ServiceIdentifier<unknown>[] = [
   IAgentUsageService,
   IAgentContextSizeService,
   IAgentSwarmService,
+  IAgentActivityView,
   IAgentPermissionModeService,
   IAgentPermissionRulesService,
   IAgentProfileService,

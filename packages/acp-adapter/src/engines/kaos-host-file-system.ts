@@ -67,4 +67,8 @@ export class KaosHostFileSystem implements IHostFileSystem {
   remove(path: string): Promise<void> {
     return this.fallback.remove(path);
   }
+
+  realpath(path: string): Promise<string> {
+    return this.fallback.realpath(path);
+  }
 }

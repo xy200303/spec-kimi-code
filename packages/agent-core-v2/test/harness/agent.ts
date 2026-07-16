@@ -60,6 +60,7 @@ import {
   FileStorageService,
   InMemoryStorageService,
   AgentFullCompactionService,
+  IAgentActivityView,
   IAgentRPCService,
   IAppendLogStore,
   IFileSystemStorageService,
@@ -114,7 +115,6 @@ import {
   type ScopeSeed,
   type ServiceIdentifier,
 } from '#/index';
-import { IAgentActivityService, ISessionActivityKernel } from '#/activity/activity';
 import { IEventBus } from '#/app/event/eventBus';
 import { IWireService } from '#/wire/wire';
 import { WireService } from '#/wire/wireService';
@@ -1013,7 +1013,6 @@ export class AgentTestContext {
         'session',
       ),
     });
-    this.session.accessor.get(ISessionActivityKernel).markActive();
     const workspace = this.session.accessor.get(ISessionWorkspaceContext);
 
     this.agent = this.session.createChild(LifecycleScope.Agent, agentId, {
@@ -1076,7 +1075,9 @@ export class AgentTestContext {
     });
 
     this.initializeRestorableServices();
-    this.get(IAgentActivityService).markReady();
+    // Resolve the activity view so its constructor subscriptions publish
+    // `agent.activity.updated` — production ignites it in agentLifecycle.
+    this.get(IAgentActivityView);
 
     const eventBus = this.get(IEventBus);
     this.disposables.push(
@@ -2395,6 +2396,10 @@ async function generateBackedResponse(
     {
       signal: options?.signal,
       auth: options?.auth,
+      // Forward the early-capture hook so a GenerateFn can fire the trace id
+      // as soon as its (simulated) response headers arrive — e.g. before a
+      // mid-stream failure — mirroring real kosong generate() behavior.
+      onTraceId: options?.onTraceId,
     },
   );
   return createStreamedMessage(
@@ -2406,6 +2411,7 @@ async function generateBackedResponse(
       usage: result.usage,
       finishReason: result.finishReason,
       rawFinishReason: result.rawFinishReason,
+      traceId: result.traceId,
     },
   );
 }
@@ -2474,13 +2480,17 @@ function normalizeProviderStreamParts(
 
 function createStreamedMessage(
   parts: readonly StreamedMessagePart[],
-  meta: Pick<Awaited<ReturnType<GenerateFn>>, 'id' | 'usage' | 'finishReason' | 'rawFinishReason'>,
+  meta: Pick<
+    Awaited<ReturnType<GenerateFn>>,
+    'id' | 'usage' | 'finishReason' | 'rawFinishReason' | 'traceId'
+  >,
 ): StreamedMessage {
   return {
     id: meta.id,
     usage: meta.usage,
     finishReason: meta.finishReason ?? null,
     rawFinishReason: meta.rawFinishReason ?? null,
+    traceId: meta.traceId ?? null,
     async *[Symbol.asyncIterator]() {
       for (const part of parts) {
         yield structuredClone(part);
